@@ -5,10 +5,7 @@ import (
 	"crypto/tls"
 	"net"
 
-	"github.com/micro/go-micro/v3/broker/http"
-	"github.com/micro/go-micro/v3/codec"
-	"github.com/micro/go-micro/v3/registry/mdns"
-	"github.com/micro/go-micro/v3/server"
+	"github.com/unistack-org/micro/v3/server"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/encoding"
 )
@@ -19,6 +16,7 @@ type netListener struct{}
 type maxMsgSizeKey struct{}
 type maxConnKey struct{}
 type tlsAuth struct{}
+type reflectionKey struct{}
 
 // gRPC Codec to be used to encode/decode requests for a given content type
 func Codec(contentType string, c encoding.Codec) server.Option {
@@ -63,23 +61,7 @@ func MaxMsgSize(s int) server.Option {
 	return setServerOption(maxMsgSizeKey{}, s)
 }
 
-func newOptions(opt ...server.Option) server.Options {
-	opts := server.Options{
-		Codecs:           make(map[string]codec.NewCodec),
-		Metadata:         map[string]string{},
-		Broker:           http.NewBroker(),
-		Registry:         mdns.NewRegistry(),
-		Address:          server.DefaultAddress,
-		Name:             server.DefaultName,
-		Id:               server.DefaultId,
-		Version:          server.DefaultVersion,
-		RegisterInterval: server.DefaultRegisterInterval,
-		RegisterTTL:      server.DefaultRegisterTTL,
-	}
-
-	for _, o := range opt {
-		o(&opts)
-	}
-
-	return opts
+// Reflection enables reflection support in grpc server
+func Reflection(b bool) server.Option {
+	return setServerOption(reflectionKey{}, b)
 }
