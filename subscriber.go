@@ -199,7 +199,7 @@ func (g *grpcServer) createSubHandler(sb *subscriber, opts server.Options) broke
 			hdr[k] = v
 		}
 		delete(hdr, "Content-Type")
-		ctx := metadata.NewContext(context.Background(), hdr)
+		ctx := metadata.NewContext(sb.opts.Context, hdr)
 
 		results := make(chan error, len(sb.handlers))
 
