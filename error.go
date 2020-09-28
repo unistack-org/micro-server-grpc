@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"os"
 
-	pb "github.com/unistack-org/micro-server-grpc/errors"
+	pb "github.com/unistack-org/micro-server-grpc/internal/errors"
 	"github.com/unistack-org/micro/v3/errors"
 	"google.golang.org/grpc/codes"
 )

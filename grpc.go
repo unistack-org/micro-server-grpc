@@ -15,7 +15,7 @@ import (
 	"time"
 
 	oldproto "github.com/golang/protobuf/proto"
-	pberr "github.com/unistack-org/micro-server-grpc/errors"
+	pberr "github.com/unistack-org/micro-server-grpc/internal/errors"
 	"github.com/unistack-org/micro/v3/broker"
 	"github.com/unistack-org/micro/v3/errors"
 	"github.com/unistack-org/micro/v3/logger"
