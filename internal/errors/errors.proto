@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-option go_package = "github.com/unistack-org/micro-server-grpc/internal/errors;errors";
+option go_package = "github.com/unistack-org/micro-server-grpc/internal/errors";
 package org.unistack.micro.server.grpc.errors;
 
 message Error {
