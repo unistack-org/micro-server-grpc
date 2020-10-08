@@ -15,7 +15,6 @@ import (
 	"time"
 
 	oldproto "github.com/golang/protobuf/proto"
-	pberr "github.com/unistack-org/micro-server-grpc/internal/errors"
 	"github.com/unistack-org/micro/v3/broker"
 	"github.com/unistack-org/micro/v3/errors"
 	"github.com/unistack-org/micro/v3/logger"
@@ -456,22 +455,10 @@ func (g *grpcServer) processRequest(stream grpc.ServerStream, service *service, 
 		if appErr := fn(ctx, r, replyv.Interface()); appErr != nil {
 			var errStatus *status.Status
 			switch verr := appErr.(type) {
-			case *pberr.Error:
-				perr := pbError(verr)
-				statusCode = microError(verr)
-				statusDesc = verr.Error()
-				errStatus, err = status.New(statusCode, statusDesc).WithDetails(perr)
-				if err != nil {
-					return err
-				}
 			case *errors.Error:
-				perr := pbError(verr)
 				statusCode = microError(verr)
 				statusDesc = verr.Error()
-				errStatus, err = status.New(statusCode, statusDesc).WithDetails(perr)
-				if err != nil {
-					return err
-				}
+				errStatus = status.New(statusCode, statusDesc)
 			case oldproto.Message:
 				// user defined error that proto based we can attach it to grpc status
 				statusCode = convertCode(appErr)
@@ -587,22 +574,10 @@ func (g *grpcServer) processStream(stream grpc.ServerStream, service *service, m
 		var err error
 		var errStatus *status.Status
 		switch verr := appErr.(type) {
-		case *pberr.Error:
-			perr := pbError(verr)
-			statusCode = microError(verr)
-			statusDesc = verr.Error()
-			errStatus, err = status.New(statusCode, statusDesc).WithDetails(perr)
-			if err != nil {
-				return err
-			}
 		case *errors.Error:
-			perr := pbError(verr)
 			statusCode = microError(verr)
 			statusDesc = verr.Error()
-			errStatus, err = status.New(statusCode, statusDesc).WithDetails(perr)
-			if err != nil {
-				return err
-			}
+			errStatus = status.New(statusCode, statusDesc)
 		case oldproto.Message:
 			// user defined error that proto based we can attach it to grpc status
 			statusCode = convertCode(appErr)

@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"os"
 
-	pb "github.com/unistack-org/micro-server-grpc/internal/errors"
 	"github.com/unistack-org/micro/v3/errors"
 	"google.golang.org/grpc/codes"
 )
@@ -64,8 +63,6 @@ func microError(err error) codes.Code {
 	switch verr := err.(type) {
 	case *errors.Error:
 		ec = verr.Code
-	case *pb.Error:
-		ec = verr.Code
 	}
 
 	if code, ok := errMapping[ec]; ok {
@@ -73,17 +70,4 @@ func microError(err error) codes.Code {
 	}
 
 	return codes.Unknown
-}
-
-func pbError(err error) *pb.Error {
-	switch verr := err.(type) {
-	case nil:
-		return nil
-	case *errors.Error:
-		return &pb.Error{Id: verr.Id, Code: verr.Code, Detail: verr.Detail, Status: verr.Status}
-	case *pb.Error:
-		return verr
-	default:
-		return &pb.Error{Code: 500, Detail: err.Error()}
-	}
 }
