@@ -476,6 +476,9 @@ func (g *grpcServer) processRequest(stream grpc.ServerStream, service *service, 
 					return err
 				}
 			default:
+				if logger.V(logger.ErrorLevel) {
+					logger.Warn("handler error will not be transferred properly, must return *errors.Error or proto.Message")
+				}
 				// default case user pass own error type that not proto based
 				statusCode = convertCode(verr)
 				statusDesc = verr.Error()
@@ -595,6 +598,9 @@ func (g *grpcServer) processStream(stream grpc.ServerStream, service *service, m
 				return err
 			}
 		default:
+			if logger.V(logger.ErrorLevel) {
+				logger.Warn("handler error will not be transferred properly, must return *errors.Error or proto.Message")
+			}
 			// default case user pass own error type that not proto based
 			statusCode = convertCode(verr)
 			statusDesc = verr.Error()
