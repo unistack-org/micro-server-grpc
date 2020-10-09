@@ -759,6 +759,8 @@ func (g *grpcServer) Register() error {
 	}
 	g.RUnlock()
 
+	service.Metadata["protocol"] = "grpc"
+	service.Metadata["transport"] = "grpc"
 	service.Endpoints = endpoints
 
 	g.RLock()
