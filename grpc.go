@@ -21,10 +21,8 @@ import (
 	meta "github.com/unistack-org/micro/v3/metadata"
 	"github.com/unistack-org/micro/v3/registry"
 	"github.com/unistack-org/micro/v3/server"
-	"github.com/unistack-org/micro/v3/util/addr"
 	"github.com/unistack-org/micro/v3/util/backoff"
 	mgrpc "github.com/unistack-org/micro/v3/util/grpc"
-	mnet "github.com/unistack-org/micro/v3/util/net"
 	regutil "github.com/unistack-org/micro/v3/util/registry"
 	"golang.org/x/net/netutil"
 	"google.golang.org/grpc"
@@ -819,49 +817,18 @@ func (g *grpcServer) Register() error {
 
 func (g *grpcServer) Deregister() error {
 	var err error
-	var advt, host, port string
 
 	g.RLock()
 	config := g.opts
 	g.RUnlock()
 
-	// check the advertise address first
-	// if it exists then use it, otherwise
-	// use the address
-	if len(config.Advertise) > 0 {
-		advt = config.Advertise
-	} else {
-		advt = config.Address
-	}
-
-	if cnt := strings.Count(advt, ":"); cnt >= 1 {
-		// ipv6 address in format [host]:port or ipv4 host:port
-		host, port, err = net.SplitHostPort(advt)
-		if err != nil {
-			return err
-		}
-	} else {
-		host = advt
-	}
-
-	addr, err := addr.Extract(host)
+	service, err := regutil.NewService(g)
 	if err != nil {
 		return err
 	}
 
-	node := &registry.Node{
-		Id:      config.Name + "-" + config.Id,
-		Address: mnet.HostPort(addr, port),
-	}
-
-	service := &registry.Service{
-		Name:    config.Name,
-		Version: config.Version,
-		Nodes:   []*registry.Node{node},
-	}
-
 	if logger.V(logger.InfoLevel) {
-		logger.Infof("Deregistering node: %s", node.Id)
+		logger.Infof("Deregistering node: %s", service.Nodes[0].Id)
 	}
 
 	opt := registry.DeregisterDomain(g.opts.Namespace)
