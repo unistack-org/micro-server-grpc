@@ -25,6 +25,7 @@ import (
 	"github.com/unistack-org/micro/v3/util/backoff"
 	mgrpc "github.com/unistack-org/micro/v3/util/grpc"
 	mnet "github.com/unistack-org/micro/v3/util/net"
+	regutil "github.com/unistack-org/micro/v3/util/registry"
 	"golang.org/x/net/netutil"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -718,49 +719,13 @@ func (g *grpcServer) Register() error {
 	}
 
 	var err error
-	var advt, host, port string
+	var service *registry.Service
 	var cacheService bool
 
-	advt = config.Advertise
-
-	if cnt := strings.Count(advt, ":"); cnt >= 1 {
-		// ipv6 address in format [host]:port or ipv4 host:port
-		host, port, err = net.SplitHostPort(advt)
-		if err != nil {
-			return err
-		}
-	} else {
-		host = advt
-	}
-
-	if ip := net.ParseIP(host); ip != nil {
-		cacheService = true
-	}
-
-	addr, err := addr.Extract(host)
+	service, err = regutil.NewService(g)
 	if err != nil {
 		return err
 	}
-
-	// make copy of metadata
-	md := meta.Copy(config.Metadata)
-
-	// register service
-	node := &registry.Node{
-		Id:       config.Name + "-" + config.Id,
-		Address:  mnet.HostPort(addr, port),
-		Metadata: md,
-	}
-
-	if node.Metadata == nil {
-		node.Metadata = make(map[string]string, 5)
-	}
-
-	node.Metadata["broker"] = config.Broker.String()
-	node.Metadata["registry"] = config.Registry.String()
-	node.Metadata["server"] = g.String()
-	node.Metadata["transport"] = g.String()
-	node.Metadata["protocol"] = "grpc"
 
 	g.RLock()
 	// Maps are ordered randomly, sort the keys for consistency
@@ -794,12 +759,7 @@ func (g *grpcServer) Register() error {
 	}
 	g.RUnlock()
 
-	service := &registry.Service{
-		Name:      config.Name,
-		Version:   config.Version,
-		Nodes:     []*registry.Node{node},
-		Endpoints: endpoints,
-	}
+	service.Endpoints = endpoints
 
 	g.RLock()
 	registered := g.registered
@@ -807,7 +767,7 @@ func (g *grpcServer) Register() error {
 
 	if !registered {
 		if logger.V(logger.InfoLevel) {
-			logger.Infof("Registry [%s] Registering node: %s", config.Registry.String(), node.Id)
+			logger.Infof("Registry [%s] Registering node: %s", config.Registry.String(), service.Nodes[0].Id)
 		}
 	}
 
