@@ -30,7 +30,7 @@ func newRpcHandler(handler interface{}, opts ...server.HandlerOption) server.Han
 	var endpoints []*registry.Endpoint
 
 	for m := 0; m < typ.NumMethod(); m++ {
-		if e := extractEndpoint(typ.Method(m)); e != nil {
+		if e := registry.ExtractEndpoint(typ.Method(m)); e != nil {
 			e.Name = name + "." + e.Name
 
 			for k, v := range options.Metadata[e.Name] {

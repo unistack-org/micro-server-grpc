@@ -662,7 +662,7 @@ func (g *grpcServer) Subscribe(sb server.Subscriber) error {
 		return fmt.Errorf("invalid subscriber: no handler functions")
 	}
 
-	if err := validateSubscriber(sb); err != nil {
+	if err := server.ValidateSubscriber(sb); err != nil {
 		return err
 	}
 
