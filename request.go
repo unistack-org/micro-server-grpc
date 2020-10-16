@@ -1,8 +1,8 @@
 package grpc
 
 import (
+	raw "github.com/unistack-org/micro-codec-bytes"
 	"github.com/unistack-org/micro/v3/codec"
-	"github.com/unistack-org/micro-codec-bytes"
 )
 
 type rpcRequest struct {
@@ -50,7 +50,7 @@ func (r *rpcRequest) Header() map[string]string {
 }
 
 func (r *rpcRequest) Read() ([]byte, error) {
-	f := &bytes.Frame{}
+	f := &raw.Frame{}
 	if err := r.codec.ReadBody(f); err != nil {
 		return nil, err
 	}
