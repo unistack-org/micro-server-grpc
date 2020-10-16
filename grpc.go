@@ -157,10 +157,21 @@ func (g *grpcServer) configure(opts ...server.Option) error {
 	}
 
 	g.rsvc = nil
+	restart := false
+	if g.started {
+		restart = true
+		if err := g.Stop(); err != nil {
+			return err
+		}
+	}
 	g.srv = grpc.NewServer(gopts...)
 
 	if v, ok := g.opts.Context.Value(reflectionKey{}).(bool); ok {
 		g.reflection = v
+	}
+
+	if restart {
+		return g.Start()
 	}
 
 	return nil
