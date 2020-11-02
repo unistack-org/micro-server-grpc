@@ -694,7 +694,7 @@ func (g *grpcServer) Register() error {
 			}
 
 			// attempt to register
-			if err := config.Registry.Register(service, rOpts...); err != nil {
+			if err := config.Registry.Register(config.Context, service, rOpts...); err != nil {
 				// set the error
 				regErr = err
 				// backoff then retry
@@ -834,7 +834,7 @@ func (g *grpcServer) Deregister() error {
 	}
 
 	opt := registry.DeregisterDomain(g.opts.Namespace)
-	if err := config.Registry.Deregister(service, opt); err != nil {
+	if err := config.Registry.Deregister(config.Context, service, opt); err != nil {
 		return err
 	}
 

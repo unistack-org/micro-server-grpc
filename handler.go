@@ -15,13 +15,7 @@ type rpcHandler struct {
 }
 
 func newRpcHandler(handler interface{}, opts ...server.HandlerOption) server.Handler {
-	options := server.HandlerOptions{
-		Metadata: make(map[string]map[string]string),
-	}
-
-	for _, o := range opts {
-		o(&options)
-	}
+	options := server.NewHandlerOptions(opts...)
 
 	typ := reflect.TypeOf(handler)
 	hdlr := reflect.ValueOf(handler)

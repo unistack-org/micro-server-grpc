@@ -36,10 +36,7 @@ type subscriber struct {
 }
 
 func newSubscriber(topic string, sub interface{}, opts ...server.SubscriberOption) server.Subscriber {
-	options := server.NewSubscriberOptions()
-	for _, o := range opts {
-		o(&options)
-	}
+	options := server.NewSubscriberOptions(opts...)
 
 	var endpoints []*registry.Endpoint
 	var handlers []*handler
