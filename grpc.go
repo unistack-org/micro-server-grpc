@@ -775,7 +775,7 @@ func (g *grpcServer) Register() error {
 	defer g.Unlock()
 
 	for sb := range g.subscribers {
-		handler := g.createSubHandler(sb, g.opts)
+		handler := g.createSubHandler(sb, config)
 		var opts []broker.SubscribeOption
 		if queue := sb.Options().Queue; len(queue) > 0 {
 			opts = append(opts, broker.SubscribeGroup(queue))
