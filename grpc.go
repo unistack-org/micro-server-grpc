@@ -707,10 +707,7 @@ func (g *grpcServer) Register() error {
 		return nil
 	}
 
-	var err error
-	var service *registry.Service
-
-	service, err = server.NewRegistryService(g)
+	service, err := server.NewRegistryService(g)
 	if err != nil {
 		return err
 	}
