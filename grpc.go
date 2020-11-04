@@ -225,14 +225,20 @@ func (g *grpcServer) getListener() net.Listener {
 func (g *grpcServer) handler(srv interface{}, stream grpc.ServerStream) (err error) {
 	defer func() {
 		if r := recover(); r != nil {
-			if logger.V(logger.ErrorLevel) {
-				logger.Error("panic recovered: ", r)
-				logger.Error(string(debug.Stack()))
+			g.RLock()
+			config := g.opts
+			g.RUnlock()
+			if config.Logger.V(logger.ErrorLevel) {
+				config.Logger.Error("panic recovered: ", r)
+				config.Logger.Error(string(debug.Stack()))
 			}
 			err = errors.InternalServerError(g.opts.Name, "panic recovered: %v", r)
 		} else if err != nil {
-			if logger.V(logger.ErrorLevel) {
-				logger.Errorf("grpc handler got error: %s", err)
+			g.RLock()
+			config := g.opts
+			g.RUnlock()
+			if config.Logger.V(logger.ErrorLevel) {
+				config.Logger.Error("grpc handler got error: %s", err)
 			}
 		}
 	}()
@@ -364,7 +370,12 @@ func (g *grpcServer) handler(srv interface{}, stream grpc.ServerStream) (err err
 		typ := reflect.TypeOf(rfl)
 		if me, ok := typ.MethodByName("ServerReflectionInfo"); ok {
 			g.rpc.mu.Lock()
-			svc.method["ServerReflectionInfo"] = prepareEndpoint(me)
+			ep, err := prepareEndpoint(me)
+			if ep != nil && err != nil {
+				svc.method["ServerReflectionInfo"] = ep
+			} else if err != nil {
+				return status.New(codes.Unimplemented, err.Error()).Err()
+			}
 			g.rpc.mu.Unlock()
 		}
 	}
@@ -476,8 +487,11 @@ func (g *grpcServer) processRequest(stream grpc.ServerStream, service *service, 
 					return err
 				}
 			default:
-				if logger.V(logger.ErrorLevel) {
-					logger.Warn("handler error will not be transferred properly, must return *errors.Error or proto.Message")
+				g.RLock()
+				config := g.opts
+				g.RUnlock()
+				if config.Logger.V(logger.ErrorLevel) {
+					config.Logger.Warn("handler error will not be transferred properly, must return *errors.Error or proto.Message")
 				}
 				// default case user pass own error type that not proto based
 				statusCode = convertCode(verr)
@@ -598,8 +612,11 @@ func (g *grpcServer) processStream(stream grpc.ServerStream, service *service, m
 				return err
 			}
 		default:
-			if logger.V(logger.ErrorLevel) {
-				logger.Warn("handler error will not be transferred properly, must return *errors.Error or proto.Message")
+			g.RLock()
+			config := g.opts
+			g.RUnlock()
+			if config.Logger.V(logger.ErrorLevel) {
+				config.Logger.Warn("handler error will not be transferred properly, must return *errors.Error or proto.Message")
 			}
 			// default case user pass own error type that not proto based
 			statusCode = convertCode(verr)
@@ -767,8 +784,8 @@ func (g *grpcServer) Register() error {
 	g.RUnlock()
 
 	if !registered {
-		if logger.V(logger.InfoLevel) {
-			logger.Infof("Registry [%s] Registering node: %s", config.Registry.String(), service.Nodes[0].Id)
+		if config.Logger.V(logger.InfoLevel) {
+			config.Logger.Info("Registry [%s] Registering node: %s", config.Registry.String(), service.Nodes[0].Id)
 		}
 	}
 
@@ -799,8 +816,8 @@ func (g *grpcServer) Register() error {
 		opts = append(opts, broker.SubscribeContext(subCtx))
 		opts = append(opts, broker.SubscribeAutoAck(sb.Options().AutoAck))
 
-		if logger.V(logger.InfoLevel) {
-			logger.Infof("Subscribing to topic: %s", sb.Topic())
+		if config.Logger.V(logger.InfoLevel) {
+			config.Logger.Info("Subscribing to topic: %s", sb.Topic())
 		}
 		sub, err := config.Broker.Subscribe(subCtx, sb.Topic(), handler, opts...)
 		if err != nil {
@@ -829,8 +846,8 @@ func (g *grpcServer) Deregister() error {
 		return err
 	}
 
-	if logger.V(logger.InfoLevel) {
-		logger.Infof("Deregistering node: %s", service.Nodes[0].Id)
+	if config.Logger.V(logger.InfoLevel) {
+		config.Logger.Info("Deregistering node: %s", service.Nodes[0].Id)
 	}
 
 	opt := registry.DeregisterDomain(g.opts.Namespace)
@@ -854,12 +871,12 @@ func (g *grpcServer) Deregister() error {
 			wg.Add(1)
 			go func(s broker.Subscriber) {
 				defer wg.Done()
-				if logger.V(logger.InfoLevel) {
-					logger.Infof("Unsubscribing from topic: %s", s.Topic())
+				if config.Logger.V(logger.InfoLevel) {
+					config.Logger.Info("Unsubscribing from topic: %s", s.Topic())
 				}
 				if err := s.Unsubscribe(g.opts.Context); err != nil {
-					if logger.V(logger.ErrorLevel) {
-						logger.Errorf("Unsubscribing from topic: %s err: %v", s.Topic(), err)
+					if config.Logger.V(logger.ErrorLevel) {
+						config.Logger.Error("Unsubscribing from topic: %s err: %v", s.Topic(), err)
 					}
 				}
 			}(sub)
@@ -908,8 +925,8 @@ func (g *grpcServer) Start() error {
 		}
 	}
 
-	if logger.V(logger.InfoLevel) {
-		logger.Infof("Server [grpc] Listening on %s", ts.Addr().String())
+	if config.Logger.V(logger.InfoLevel) {
+		config.Logger.Info("Server [grpc] Listening on %s", ts.Addr().String())
 	}
 	g.Lock()
 	g.opts.Address = ts.Addr().String()
@@ -922,27 +939,27 @@ func (g *grpcServer) Start() error {
 	if len(g.subscribers) > 0 {
 		// connect to the broker
 		if err := config.Broker.Connect(config.Context); err != nil {
-			if logger.V(logger.ErrorLevel) {
-				logger.Errorf("Broker [%s] connect error: %v", config.Broker.String(), err)
+			if config.Logger.V(logger.ErrorLevel) {
+				config.Logger.Error("Broker [%s] connect error: %v", config.Broker.String(), err)
 			}
 			return err
 		}
 
-		if logger.V(logger.InfoLevel) {
-			logger.Infof("Broker [%s] Connected to %s", config.Broker.String(), config.Broker.Address())
+		if config.Logger.V(logger.InfoLevel) {
+			config.Logger.Info("Broker [%s] Connected to %s", config.Broker.String(), config.Broker.Address())
 		}
 	}
 
 	// use RegisterCheck func before register
 	if err := g.opts.RegisterCheck(config.Context); err != nil {
-		if logger.V(logger.ErrorLevel) {
-			logger.Errorf("Server %s-%s register check error: %s", config.Name, config.Id, err)
+		if config.Logger.V(logger.ErrorLevel) {
+			config.Logger.Error("Server %s-%s register check error: %s", config.Name, config.Id, err)
 		}
 	} else {
 		// announce self to the world
 		if err := g.Register(); err != nil {
-			if logger.V(logger.ErrorLevel) {
-				logger.Errorf("Server register error: %v", err)
+			if config.Logger.V(logger.ErrorLevel) {
+				config.Logger.Error("Server register error: %v", err)
 			}
 		}
 	}
@@ -950,12 +967,12 @@ func (g *grpcServer) Start() error {
 	// micro: go ts.Accept(s.accept)
 	go func() {
 		if err := g.srv.Serve(ts); err != nil {
-			if logger.V(logger.ErrorLevel) {
-				logger.Errorf("gRPC Server start error: %v", err)
+			if config.Logger.V(logger.ErrorLevel) {
+				config.Logger.Error("gRPC Server start error: %v", err)
 			}
 			if err := g.Stop(); err != nil {
-				if logger.V(logger.ErrorLevel) {
-					logger.Errorf("gRPC Server stop error: %v", err)
+				if config.Logger.V(logger.ErrorLevel) {
+					config.Logger.Error("gRPC Server stop error: %v", err)
 				}
 			}
 		}
@@ -983,24 +1000,24 @@ func (g *grpcServer) Start() error {
 				g.RUnlock()
 				rerr := g.opts.RegisterCheck(g.opts.Context)
 				if rerr != nil && registered {
-					if logger.V(logger.ErrorLevel) {
-						logger.Errorf("Server %s-%s register check error: %s, deregister it", config.Name, config.Id, rerr)
+					if config.Logger.V(logger.ErrorLevel) {
+						config.Logger.Error("Server %s-%s register check error: %s, deregister it", config.Name, config.Id, rerr)
 					}
 					// deregister self in case of error
 					if err := g.Deregister(); err != nil {
-						if logger.V(logger.ErrorLevel) {
-							logger.Errorf("Server %s-%s deregister error: %s", config.Name, config.Id, err)
+						if config.Logger.V(logger.ErrorLevel) {
+							config.Logger.Error("Server %s-%s deregister error: %s", config.Name, config.Id, err)
 						}
 					}
 				} else if rerr != nil && !registered {
-					if logger.V(logger.ErrorLevel) {
-						logger.Errorf("Server %s-%s register check error: %s", config.Name, config.Id, rerr)
+					if config.Logger.V(logger.ErrorLevel) {
+						config.Logger.Error("Server %s-%s register check error: %s", config.Name, config.Id, rerr)
 					}
 					continue
 				}
 				if err := g.Register(); err != nil {
-					if logger.V(logger.ErrorLevel) {
-						logger.Errorf("Server %s-%s register error: %s", config.Name, config.Id, err)
+					if config.Logger.V(logger.ErrorLevel) {
+						config.Logger.Error("Server %s-%s register error: %s", config.Name, config.Id, err)
 					}
 				}
 			// wait for exit
@@ -1011,8 +1028,8 @@ func (g *grpcServer) Start() error {
 
 		// deregister self
 		if err := g.Deregister(); err != nil {
-			if logger.V(logger.ErrorLevel) {
-				logger.Error("Server deregister error: ", err)
+			if config.Logger.V(logger.ErrorLevel) {
+				config.Logger.Error("Server deregister error: ", err)
 			}
 		}
 
@@ -1038,13 +1055,13 @@ func (g *grpcServer) Start() error {
 		// close transport
 		ch <- nil
 
-		if logger.V(logger.InfoLevel) {
-			logger.Infof("Broker [%s] Disconnected from %s", config.Broker.String(), config.Broker.Address())
+		if config.Logger.V(logger.InfoLevel) {
+			config.Logger.Info("Broker [%s] Disconnected from %s", config.Broker.String(), config.Broker.Address())
 		}
 		// disconnect broker
 		if err := config.Broker.Disconnect(config.Context); err != nil {
-			if logger.V(logger.ErrorLevel) {
-				logger.Errorf("Broker [%s] disconnect error: %v", config.Broker.String(), err)
+			if config.Logger.V(logger.ErrorLevel) {
+				config.Logger.Error("Broker [%s] disconnect error: %v", config.Broker.String(), err)
 			}
 		}
 	}()
