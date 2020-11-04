@@ -21,7 +21,6 @@ import (
 	meta "github.com/unistack-org/micro/v3/metadata"
 	"github.com/unistack-org/micro/v3/registry"
 	"github.com/unistack-org/micro/v3/server"
-	"github.com/unistack-org/micro/v3/util/backoff"
 	mgrpc "github.com/unistack-org/micro/v3/util/grpc"
 	"golang.org/x/net/netutil"
 	"google.golang.org/grpc"
@@ -700,35 +699,9 @@ func (g *grpcServer) Register() error {
 	config := g.opts
 	g.RUnlock()
 
-	regFunc := func(service *registry.Service) error {
-		var regErr error
-
-		for i := 0; i < 3; i++ {
-			// set the ttl and namespace
-			rOpts := []registry.RegisterOption{
-				registry.RegisterTTL(config.RegisterTTL),
-				registry.RegisterDomain(g.opts.Namespace),
-			}
-
-			// attempt to register
-			if err := config.Registry.Register(config.Context, service, rOpts...); err != nil {
-				// set the error
-				regErr = err
-				// backoff then retry
-				time.Sleep(backoff.Do(i + 1))
-				continue
-			}
-			// success so nil error
-			regErr = nil
-			break
-		}
-
-		return regErr
-	}
-
 	// if service already filled, reuse it and return early
 	if rsvc != nil {
-		if err := regFunc(rsvc); err != nil {
+		if err := server.DefaultRegisterFunc(rsvc, config); err != nil {
 			return err
 		}
 		return nil
@@ -790,7 +763,7 @@ func (g *grpcServer) Register() error {
 	}
 
 	// register the service
-	if err := regFunc(service); err != nil {
+	if err := server.DefaultRegisterFunc(service, config); err != nil {
 		return err
 	}
 
@@ -850,8 +823,7 @@ func (g *grpcServer) Deregister() error {
 		config.Logger.Info("Deregistering node: %s", service.Nodes[0].Id)
 	}
 
-	opt := registry.DeregisterDomain(g.opts.Namespace)
-	if err := config.Registry.Deregister(config.Context, service, opt); err != nil {
+	if err := server.DefaultDeregisterFunc(service, config); err != nil {
 		return err
 	}
 
