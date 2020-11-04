@@ -709,7 +709,6 @@ func (g *grpcServer) Register() error {
 
 	var err error
 	var service *registry.Service
-	var cacheService bool
 
 	service, err = server.NewRegistryService(g)
 	if err != nil {
@@ -800,9 +799,7 @@ func (g *grpcServer) Register() error {
 	}
 
 	g.registered = true
-	if cacheService {
-		g.rsvc = service
-	}
+	g.rsvc = service
 
 	return nil
 }
