@@ -21,7 +21,6 @@ import (
 	meta "github.com/unistack-org/micro/v3/metadata"
 	"github.com/unistack-org/micro/v3/registry"
 	"github.com/unistack-org/micro/v3/server"
-	mgrpc "github.com/unistack-org/micro/v3/util/grpc"
 	"golang.org/x/net/netutil"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -252,7 +251,7 @@ func (g *grpcServer) handler(srv interface{}, stream grpc.ServerStream) (err err
 		return status.Errorf(codes.Internal, "method does not exist in context")
 	}
 
-	serviceName, methodName, err := mgrpc.ServiceMethod(fullMethod)
+	serviceName, methodName, err := serviceMethod(fullMethod)
 	if err != nil {
 		return status.New(codes.InvalidArgument, err.Error()).Err()
 	}
@@ -319,7 +318,7 @@ func (g *grpcServer) handler(srv interface{}, stream grpc.ServerStream) (err err
 
 		// create a client.Request
 		request := &rpcRequest{
-			service:     mgrpc.ServiceFromMethod(fullMethod),
+			service:     serviceFromMethod(fullMethod),
 			contentType: ct,
 			method:      fmt.Sprintf("%s.%s", serviceName, methodName),
 			codec:       codec,
