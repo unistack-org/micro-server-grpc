@@ -3,6 +3,7 @@ package grpc
 import (
 	raw "github.com/unistack-org/micro-codec-bytes"
 	"github.com/unistack-org/micro/v3/codec"
+	"github.com/unistack-org/micro/v3/metadata"
 )
 
 type rpcRequest struct {
@@ -10,7 +11,7 @@ type rpcRequest struct {
 	method      string
 	contentType string
 	codec       codec.Codec
-	header      map[string]string
+	header      metadata.Metadata
 	body        []byte
 	stream      bool
 	payload     interface{}
@@ -20,7 +21,7 @@ type rpcMessage struct {
 	topic       string
 	contentType string
 	payload     interface{}
-	header      map[string]string
+	header      metadata.Metadata
 	body        []byte
 	codec       codec.Codec
 }
@@ -45,7 +46,7 @@ func (r *rpcRequest) Codec() codec.Reader {
 	return r.codec
 }
 
-func (r *rpcRequest) Header() map[string]string {
+func (r *rpcRequest) Header() metadata.Metadata {
 	return r.header
 }
 
@@ -77,7 +78,7 @@ func (r *rpcMessage) Payload() interface{} {
 	return r.payload
 }
 
-func (r *rpcMessage) Header() map[string]string {
+func (r *rpcMessage) Header() metadata.Metadata {
 	return r.header
 }
 

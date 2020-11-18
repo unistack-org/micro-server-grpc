@@ -6,7 +6,7 @@ require (
 	github.com/golang/protobuf v1.4.3
 	github.com/google/go-cmp v0.5.1 // indirect
 	github.com/unistack-org/micro-codec-bytes v0.0.0-20200828083432-4e49e953d844
-	github.com/unistack-org/micro/v3 v3.0.0-gamma.0.20201104214903-1fbf8b2e209e
+	github.com/unistack-org/micro/v3 v3.0.2-0.20201117210202-01e64cb0c0f3
 	golang.org/x/net v0.0.0-20200904194848-62affa334b73
 	golang.org/x/sys v0.0.0-20200803210538-64077c9b5642 // indirect
 	golang.org/x/text v0.3.3 // indirect
