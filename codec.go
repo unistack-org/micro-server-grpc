@@ -1,233 +1,84 @@
 package grpc
 
 import (
-	b "bytes"
-	"encoding/json"
-	"strings"
+	"io"
 
-	oldjsonpb "github.com/golang/protobuf/jsonpb"
-	oldproto "github.com/golang/protobuf/proto"
-	bytes "github.com/unistack-org/micro-codec-bytes"
 	"github.com/unistack-org/micro/v3/codec"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/encoding"
-	"google.golang.org/grpc/metadata"
-	jsonpb "google.golang.org/protobuf/encoding/protojson"
-	"google.golang.org/protobuf/proto"
 )
 
-type jsonCodec struct{}
-type bytesCodec struct{}
-type protoCodec struct{}
-type wrapCodec struct{ encoding.Codec }
+type wrapStream struct{ grpc.ServerStream }
 
-var (
-	jsonpbMarshaler = jsonpb.MarshalOptions{
-		UseEnumNumbers:  false,
-		EmitUnpopulated: false,
-		UseProtoNames:   true,
-		AllowPartial:    false,
-	}
+func (w *wrapStream) Write(d []byte) (int, error) {
+	n := len(d)
+	err := w.ServerStream.SendMsg(&codec.Frame{Data: d})
+	return n, err
+}
 
-	jsonpbUnmarshaler = jsonpb.UnmarshalOptions{
-		DiscardUnknown: false,
-		AllowPartial:   false,
-	}
+func (w *wrapStream) Read(d []byte) (int, error) {
+	m := &codec.Frame{}
+	err := w.ServerStream.RecvMsg(m)
+	d = m.Data
+	return len(d), err
+}
 
-	oldjsonpbMarshaler = oldjsonpb.Marshaler{
-		OrigName:     true,
-		EmitDefaults: false,
-	}
+type wrapMicroCodec struct{ codec.Codec }
 
-	oldjsonpbUnmarshaler = oldjsonpb.Unmarshaler{
-		AllowUnknownFields: false,
-	}
-)
+func (w *wrapMicroCodec) Name() string {
+	return w.Codec.String()
+}
 
-var (
-	defaultGRPCCodecs = map[string]encoding.Codec{
-		"application/json":         jsonCodec{},
-		"application/proto":        protoCodec{},
-		"application/protobuf":     protoCodec{},
-		"application/octet-stream": protoCodec{},
-		"application/grpc":         protoCodec{},
-		"application/grpc+json":    jsonCodec{},
-		"application/grpc+proto":   protoCodec{},
-		"application/grpc+bytes":   bytesCodec{},
-	}
-)
+type wrapGrpcCodec struct{ encoding.Codec }
 
-func (w wrapCodec) String() string {
+func (w *wrapGrpcCodec) String() string {
 	return w.Codec.Name()
 }
 
-func (w wrapCodec) Marshal(v interface{}) ([]byte, error) {
+func (w *wrapGrpcCodec) Marshal(v interface{}) ([]byte, error) {
 	switch m := v.(type) {
-	case *bytes.Frame:
+	case *codec.Frame:
 		return m.Data, nil
 	}
 	return w.Codec.Marshal(v)
 }
 
-func (w wrapCodec) Unmarshal(data []byte, v interface{}) error {
-	if len(data) == 0 {
-		return nil
-	}
-	if v == nil {
+func (w wrapGrpcCodec) Unmarshal(d []byte, v interface{}) error {
+	if d == nil || v == nil {
 		return nil
 	}
 	switch m := v.(type) {
-	case *bytes.Frame:
-		m.Data = data
+	case *codec.Frame:
+		m.Data = d
 		return nil
 	}
-	return w.Codec.Unmarshal(data, v)
+	return w.Codec.Unmarshal(d, v)
 }
 
-func (protoCodec) Marshal(v interface{}) ([]byte, error) {
-	switch m := v.(type) {
-	case proto.Message:
-		return proto.Marshal(m)
-	case oldproto.Message:
-		return oldproto.Marshal(m)
-	}
-	return nil, codec.ErrInvalidMessage
-}
-
-func (protoCodec) Unmarshal(data []byte, v interface{}) error {
-	if len(data) == 0 {
-		return nil
-	}
-	if v == nil {
-		return nil
-	}
-	switch m := v.(type) {
-	case proto.Message:
-		return proto.Unmarshal(data, m)
-	case oldproto.Message:
-		return oldproto.Unmarshal(data, m)
-	}
-	return codec.ErrInvalidMessage
-}
-
-func (protoCodec) Name() string {
-	return "proto"
-}
-
-func (jsonCodec) Marshal(v interface{}) ([]byte, error) {
-	switch m := v.(type) {
-	case proto.Message:
-		return jsonpbMarshaler.Marshal(m)
-	case oldproto.Message:
-		buf := b.NewBuffer(nil)
-		err := oldjsonpbMarshaler.Marshal(buf, m)
-		return buf.Bytes(), err
-	}
-	return json.Marshal(v)
-}
-
-func (jsonCodec) Unmarshal(data []byte, v interface{}) error {
-	if len(data) == 0 {
-		return nil
-	}
-	if v == nil {
-		return nil
-	}
-	switch m := v.(type) {
-	case proto.Message:
-		return jsonpbUnmarshaler.Unmarshal(data, m)
-	case oldproto.Message:
-		return oldjsonpbUnmarshaler.Unmarshal(b.NewReader(data), m)
-	}
-	return json.Unmarshal(data, v)
-}
-
-func (jsonCodec) Name() string {
-	return "json"
-}
-
-func (bytesCodec) Marshal(v interface{}) ([]byte, error) {
-	switch m := v.(type) {
-	case *[]byte:
-		return *m, nil
-	}
-	return nil, codec.ErrInvalidMessage
-}
-
-func (bytesCodec) Unmarshal(data []byte, v interface{}) error {
-	if len(data) == 0 {
-		return nil
-	}
-	if v == nil {
-		return nil
-	}
-	switch m := v.(type) {
-	case *[]byte:
-		*m = data
-		return nil
-	}
-	return codec.ErrInvalidMessage
-}
-
-func (bytesCodec) Name() string {
-	return "bytes"
-}
-
-type grpcCodec struct {
-	grpc.ServerStream
-	// headers
-	id       string
-	target   string
-	method   string
-	endpoint string
-
-	c encoding.Codec
-}
-
-func (g *grpcCodec) ReadHeader(m *codec.Message, mt codec.MessageType) error {
-	md, _ := metadata.FromIncomingContext(g.ServerStream.Context())
-	if m == nil {
-		m = new(codec.Message)
-	}
-	if m.Header == nil {
-		m.Header = make(map[string]string, len(md))
-	}
-	for k, v := range md {
-		m.Header[k] = strings.Join(v, ",")
-	}
-	m.Id = g.id
-	m.Target = g.target
-	m.Method = g.method
-	m.Endpoint = g.endpoint
+func (g *wrapGrpcCodec) ReadHeader(conn io.ReadWriter, m *codec.Message, mt codec.MessageType) error {
 	return nil
 }
 
-func (g *grpcCodec) ReadBody(v interface{}) error {
+func (g *wrapGrpcCodec) ReadBody(conn io.ReadWriter, v interface{}) error {
 	// caller has requested a frame
 	switch m := v.(type) {
-	case *bytes.Frame:
-		return g.ServerStream.RecvMsg(m)
+	case *codec.Frame:
+		_, err := conn.Read(m.Data)
+		return err
 	}
-	return g.ServerStream.RecvMsg(v)
+	return codec.ErrInvalidMessage
 }
 
-func (g *grpcCodec) Write(m *codec.Message, v interface{}) error {
+func (g *wrapGrpcCodec) Write(conn io.ReadWriter, m *codec.Message, v interface{}) error {
 	// if we don't have a body
 	if v != nil {
-		b, err := g.c.Marshal(v)
+		b, err := g.Marshal(v)
 		if err != nil {
 			return err
 		}
 		m.Body = b
 	}
 	// write the body using the framing codec
-	return g.ServerStream.SendMsg(&bytes.Frame{Data: m.Body})
-}
-
-func (g *grpcCodec) Close() error {
-	return nil
-}
-
-func (g *grpcCodec) String() string {
-	return "grpc"
+	_, err := conn.Write(m.Body)
+	return err
 }

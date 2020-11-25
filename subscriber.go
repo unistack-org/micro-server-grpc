@@ -110,9 +110,9 @@ func (g *grpcServer) createSubHandler(sb *subscriber, opts server.Options) broke
 	return func(p broker.Event) (err error) {
 		defer func() {
 			if r := recover(); r != nil {
-				if logger.V(logger.ErrorLevel) {
-					logger.Error("panic recovered: ", r)
-					logger.Error(string(debug.Stack()))
+				if g.opts.Logger.V(logger.ErrorLevel) {
+					g.opts.Logger.Error("panic recovered: ", r)
+					g.opts.Logger.Error(string(debug.Stack()))
 				}
 				err = errors.InternalServerError(g.opts.Name+".subscriber", "panic recovered: %v", r)
 			}
@@ -129,7 +129,7 @@ func (g *grpcServer) createSubHandler(sb *subscriber, opts server.Options) broke
 			msg.Header["Content-Type"] = defaultContentType
 			ct = defaultContentType
 		}
-		cf, err := g.newGRPCCodec(ct)
+		cf, err := g.newCodec(ct)
 		if err != nil {
 			return err
 		}

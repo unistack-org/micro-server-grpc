@@ -1,14 +1,18 @@
 package grpc
 
 import (
-	raw "github.com/unistack-org/micro-codec-bytes"
+	"io"
+
 	"github.com/unistack-org/micro/v3/codec"
 	"github.com/unistack-org/micro/v3/metadata"
 )
 
 type rpcRequest struct {
+	rw          io.ReadWriter
 	service     string
 	method      string
+	endpoint    string
+	target      string
 	contentType string
 	codec       codec.Codec
 	header      metadata.Metadata
@@ -42,7 +46,7 @@ func (r *rpcRequest) Endpoint() string {
 	return r.method
 }
 
-func (r *rpcRequest) Codec() codec.Reader {
+func (r *rpcRequest) Codec() codec.Codec {
 	return r.codec
 }
 
@@ -51,8 +55,8 @@ func (r *rpcRequest) Header() metadata.Metadata {
 }
 
 func (r *rpcRequest) Read() ([]byte, error) {
-	f := &raw.Frame{}
-	if err := r.codec.ReadBody(f); err != nil {
+	f := &codec.Frame{}
+	if err := r.codec.ReadBody(r.rw, f); err != nil {
 		return nil, err
 	}
 	return f.Data, nil
@@ -86,6 +90,6 @@ func (r *rpcMessage) Body() []byte {
 	return r.body
 }
 
-func (r *rpcMessage) Codec() codec.Reader {
+func (r *rpcMessage) Codec() codec.Codec {
 	return r.codec
 }
