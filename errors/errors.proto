@@ -1,7 +1,6 @@
 syntax = "proto3";
 
-option go_package = ".;errors";
-package org.unistack.micro.server.grpc.errors;
+package errors;
 
 message Error {
   string id = 1;
