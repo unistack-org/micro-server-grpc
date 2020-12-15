@@ -189,18 +189,6 @@ func (g *grpcServer) getGrpcOptions() []grpc.ServerOption {
 	return opts
 }
 
-func (g *grpcServer) getListener() net.Listener {
-	if g.opts.Context == nil {
-		return nil
-	}
-
-	if l, ok := g.opts.Context.Value(netListener{}).(net.Listener); ok && l != nil {
-		return l
-	}
-
-	return nil
-}
-
 func (g *grpcServer) handler(srv interface{}, stream grpc.ServerStream) (err error) {
 	defer func() {
 		if r := recover(); r != nil {
@@ -852,7 +840,7 @@ func (g *grpcServer) Start() error {
 	// micro: config.Transport.Listen(config.Address)
 	var ts net.Listener
 
-	if l := g.getListener(); l != nil {
+	if l := config.Listener; l != nil {
 		ts = l
 	} else {
 		var err error
@@ -869,10 +857,8 @@ func (g *grpcServer) Start() error {
 		}
 	}
 
-	if g.opts.Context != nil {
-		if c, ok := g.opts.Context.Value(maxConnKey{}).(int); ok && c > 0 {
-			ts = netutil.LimitListener(ts, c)
-		}
+	if config.MaxConn > 0 {
+		ts = netutil.LimitListener(ts, config.MaxConn)
 	}
 
 	if config.Logger.V(logger.InfoLevel) {
