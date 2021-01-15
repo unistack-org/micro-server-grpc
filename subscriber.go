@@ -111,8 +111,8 @@ func (g *grpcServer) createSubHandler(sb *subscriber, opts server.Options) broke
 		defer func() {
 			if r := recover(); r != nil {
 				if g.opts.Logger.V(logger.ErrorLevel) {
-					g.opts.Logger.Error("panic recovered: ", r)
-					g.opts.Logger.Error(string(debug.Stack()))
+					g.opts.Logger.Error(g.opts.Context, "panic recovered: ", r)
+					g.opts.Logger.Error(g.opts.Context, string(debug.Stack()))
 				}
 				err = errors.InternalServerError(g.opts.Name+".subscriber", "panic recovered: %v", r)
 			}
