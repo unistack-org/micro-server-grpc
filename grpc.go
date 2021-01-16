@@ -579,11 +579,8 @@ func (g *grpcServer) processStream(stream grpc.ServerStream, service *service, m
 				return err
 			}
 		default:
-			g.RLock()
-			config := g.opts
-			g.RUnlock()
-			if config.Logger.V(logger.ErrorLevel) {
-				config.Logger.Warn(config.Context, "handler error will not be transferred properly, must return *errors.Error or proto.Message")
+			if g.opts.Logger.V(logger.ErrorLevel) {
+				g.opts.Logger.Error(g.opts.Context, "handler error will not be transferred properly, must return *errors.Error or proto.Message")
 			}
 			// default case user pass own error type that not proto based
 			statusCode = convertCode(verr)
