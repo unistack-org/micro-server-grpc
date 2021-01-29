@@ -11,7 +11,7 @@ import (
 	"github.com/unistack-org/micro/v3/errors"
 	"github.com/unistack-org/micro/v3/logger"
 	"github.com/unistack-org/micro/v3/metadata"
-	"github.com/unistack-org/micro/v3/registry"
+	"github.com/unistack-org/micro/v3/register"
 	"github.com/unistack-org/micro/v3/server"
 )
 
@@ -31,14 +31,14 @@ type subscriber struct {
 	typ        reflect.Type
 	subscriber interface{}
 	handlers   []*handler
-	endpoints  []*registry.Endpoint
+	endpoints  []*register.Endpoint
 	opts       server.SubscriberOptions
 }
 
 func newSubscriber(topic string, sub interface{}, opts ...server.SubscriberOption) server.Subscriber {
 	options := server.NewSubscriberOptions(opts...)
 
-	var endpoints []*registry.Endpoint
+	var endpoints []*register.Endpoint
 	var handlers []*handler
 
 	if typ := reflect.TypeOf(sub); typ.Kind() == reflect.Func {
@@ -56,9 +56,9 @@ func newSubscriber(topic string, sub interface{}, opts ...server.SubscriberOptio
 
 		handlers = append(handlers, h)
 
-		endpoints = append(endpoints, &registry.Endpoint{
+		endpoints = append(endpoints, &register.Endpoint{
 			Name:    "Func",
-			Request: registry.ExtractSubValue(typ),
+			Request: register.ExtractSubValue(typ),
 			Metadata: map[string]string{
 				"topic":      topic,
 				"subscriber": "true",
@@ -84,9 +84,9 @@ func newSubscriber(topic string, sub interface{}, opts ...server.SubscriberOptio
 
 			handlers = append(handlers, h)
 
-			endpoints = append(endpoints, &registry.Endpoint{
+			endpoints = append(endpoints, &register.Endpoint{
 				Name:    name + "." + method.Name,
-				Request: registry.ExtractSubValue(method.Type),
+				Request: register.ExtractSubValue(method.Type),
 				Metadata: map[string]string{
 					"topic":      topic,
 					"subscriber": "true",
@@ -224,7 +224,7 @@ func (s *subscriber) Subscriber() interface{} {
 	return s.subscriber
 }
 
-func (s *subscriber) Endpoints() []*registry.Endpoint {
+func (s *subscriber) Endpoints() []*register.Endpoint {
 	return s.endpoints
 }
 

@@ -20,7 +20,7 @@ import (
 	"github.com/unistack-org/micro/v3/errors"
 	"github.com/unistack-org/micro/v3/logger"
 	meta "github.com/unistack-org/micro/v3/metadata"
-	"github.com/unistack-org/micro/v3/registry"
+	"github.com/unistack-org/micro/v3/register"
 	"github.com/unistack-org/micro/v3/server"
 	"golang.org/x/net/netutil"
 	"google.golang.org/grpc"
@@ -59,8 +59,8 @@ type grpcServer struct {
 	registered bool
 
 	reflection bool
-	// registry service instance
-	rsvc *registry.Service
+	// register service instance
+	rsvc *register.Service
 
 	codecs map[string]codec.Codec
 }
@@ -101,8 +101,8 @@ func (g *grpcServer) configure(opts ...server.Option) error {
 		o(&g.opts)
 	}
 
-	if g.opts.Registry == nil {
-		return fmt.Errorf("registry not set")
+	if g.opts.Register == nil {
+		return fmt.Errorf("register not set")
 	}
 
 	if g.opts.Broker == nil {
@@ -672,7 +672,7 @@ func (g *grpcServer) Register() error {
 		return nil
 	}
 
-	service, err := server.NewRegistryService(g)
+	service, err := server.NewRegisterService(g)
 	if err != nil {
 		return err
 	}
@@ -700,7 +700,7 @@ func (g *grpcServer) Register() error {
 		return subscriberList[i].topic > subscriberList[j].topic
 	})
 
-	endpoints := make([]*registry.Endpoint, 0, len(handlerList)+len(subscriberList))
+	endpoints := make([]*register.Endpoint, 0, len(handlerList)+len(subscriberList))
 	for _, n := range handlerList {
 		endpoints = append(endpoints, g.handlers[n].Endpoints()...)
 	}
@@ -719,7 +719,7 @@ func (g *grpcServer) Register() error {
 
 	if !registered {
 		if config.Logger.V(logger.InfoLevel) {
-			config.Logger.Infof(config.Context, "Registry [%s] Registering node: %s", config.Registry.String(), service.Nodes[0].Id)
+			config.Logger.Infof(config.Context, "Register [%s] Registering node: %s", config.Register.String(), service.Nodes[0].Id)
 		}
 	}
 
@@ -773,7 +773,7 @@ func (g *grpcServer) Deregister() error {
 	config := g.opts
 	g.RUnlock()
 
-	service, err := server.NewRegistryService(g)
+	service, err := server.NewRegisterService(g)
 	if err != nil {
 		return err
 	}
@@ -1029,6 +1029,10 @@ func (g *grpcServer) Stop() error {
 
 func (g *grpcServer) String() string {
 	return "grpc"
+}
+
+func (g *grpcServer) Name() string {
+	return g.opts.Name
 }
 
 func NewServer(opts ...server.Option) server.Server {
