@@ -19,7 +19,7 @@ import (
 	"github.com/unistack-org/micro/v3/codec"
 	"github.com/unistack-org/micro/v3/errors"
 	"github.com/unistack-org/micro/v3/logger"
-	meta "github.com/unistack-org/micro/v3/metadata"
+	metadata "github.com/unistack-org/micro/v3/metadata"
 	"github.com/unistack-org/micro/v3/register"
 	"github.com/unistack-org/micro/v3/server"
 	"golang.org/x/net/netutil"
@@ -27,7 +27,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/encoding"
-	"google.golang.org/grpc/metadata"
+	gmetadata "google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/peer"
 	grpcreflect "google.golang.org/grpc/reflection/grpc_reflection_v1alpha"
 	"google.golang.org/grpc/status"
@@ -226,35 +226,34 @@ func (g *grpcServer) handler(srv interface{}, stream grpc.ServerStream) (err err
 	}
 
 	// get grpc metadata
-	gmd, ok := metadata.FromIncomingContext(stream.Context())
+	gmd, ok := gmetadata.FromIncomingContext(stream.Context())
 	if !ok {
-		gmd = metadata.MD{}
+		gmd = gmetadata.MD{}
 	}
 
-	// copy the metadata to go-micro.metadata
-	md := meta.Metadata{}
+	md := metadata.New(len(gmd))
 	for k, v := range gmd {
-		md[k] = strings.Join(v, ", ")
+		md.Set(k, strings.Join(v, ", "))
 	}
 
 	// timeout for server deadline
-	to := md["timeout"]
+	to, ok := md.Get("timeout")
+	if ok {
+		md.Del("x-content-type")
+	}
 
 	// get content type
 	ct := defaultContentType
 
-	if ctype, ok := md["x-content-type"]; ok {
+	if ctype, ok := md.Get("content-type"); ok {
 		ct = ctype
-	}
-	if ctype, ok := md["content-type"]; ok {
+	} else if ctype, ok := md.Get("x-content-type"); ok {
 		ct = ctype
+		md.Del("x-content-type")
 	}
-
-	delete(md, "x-content-type")
-	delete(md, "timeout")
 
 	// create new context
-	ctx := meta.NewContext(stream.Context(), md)
+	ctx := metadata.NewIncomingContext(stream.Context(), md)
 
 	// get peer from context
 	if p, ok := peer.FromContext(stream.Context()); ok {
@@ -491,15 +490,15 @@ func (s *reflectStream) Recv() (*grpcreflect.ServerReflectionRequest, error) {
 	return req, err
 }
 
-func (s *reflectStream) SetHeader(metadata.MD) error {
+func (s *reflectStream) SetHeader(gmetadata.MD) error {
 	return nil
 }
 
-func (s *reflectStream) SendHeader(metadata.MD) error {
+func (s *reflectStream) SendHeader(gmetadata.MD) error {
 	return nil
 }
 
-func (s *reflectStream) SetTrailer(metadata.MD) {
+func (s *reflectStream) SetTrailer(gmetadata.MD) {
 
 }
 
