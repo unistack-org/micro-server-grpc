@@ -436,14 +436,6 @@ func (g *grpcServer) processRequest(stream grpc.ServerStream, service *service, 
 				statusCode = microError(verr)
 				statusDesc = verr.Error()
 				errStatus = status.New(statusCode, statusDesc)
-			case oldproto.Message:
-				// user defined error that proto based we can attach it to grpc status
-				statusCode = convertCode(appErr)
-				statusDesc = appErr.Error()
-				errStatus, err = status.New(statusCode, statusDesc).WithDetails(verr)
-				if err != nil {
-					return err
-				}
 			case proto.Message:
 				// user defined error that proto based we can attach it to grpc status
 				statusCode = convertCode(appErr)
@@ -561,14 +553,6 @@ func (g *grpcServer) processStream(stream grpc.ServerStream, service *service, m
 			statusCode = microError(verr)
 			statusDesc = verr.Error()
 			errStatus = status.New(statusCode, statusDesc)
-		case oldproto.Message:
-			// user defined error that proto based we can attach it to grpc status
-			statusCode = convertCode(appErr)
-			statusDesc = appErr.Error()
-			errStatus, err = status.New(statusCode, statusDesc).WithDetails(verr)
-			if err != nil {
-				return err
-			}
 		case proto.Message:
 			// user defined error that proto based we can attach it to grpc status
 			statusCode = convertCode(appErr)
