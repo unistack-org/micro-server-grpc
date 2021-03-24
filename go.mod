@@ -4,10 +4,9 @@ go 1.15
 
 require (
 	github.com/golang/protobuf v1.5.1
-	github.com/unistack-org/micro/v3 v3.2.26
+	github.com/unistack-org/micro/v3 v3.3.0
 	golang.org/x/net v0.0.0-20210324051636-2c4c8ecb7826
 	golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1 // indirect
-	google.golang.org/genproto v0.0.0-20200904004341-0bd0a958aa1d // indirect
 	google.golang.org/grpc v1.36.0
 	google.golang.org/protobuf v1.26.0
 )
