@@ -259,7 +259,7 @@ func (g *grpcServer) handler(srv interface{}, stream grpc.ServerStream) (err err
 	// timeout for server deadline
 	to, ok := md.Get("timeout")
 	if ok {
-		md.Del("x-content-type")
+		md.Del("timeout")
 	}
 
 	// get content type
@@ -548,6 +548,10 @@ func (g *grpcServer) processStream(stream grpc.ServerStream, service *service, m
 func (g *grpcServer) newCodec(ct string) (codec.Codec, error) {
 	g.RLock()
 	defer g.RUnlock()
+
+	if idx := strings.IndexRune(ct, ';'); idx >= 0 {
+		ct = ct[:idx]
+	}
 
 	if c, ok := g.opts.Codecs[ct]; ok {
 		return c, nil
