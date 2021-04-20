@@ -188,10 +188,8 @@ func (g *grpcServer) getMaxMsgSize() int {
 }
 
 func (g *grpcServer) getCredentials() credentials.TransportCredentials {
-	if g.opts.Context != nil {
-		if v, ok := g.opts.Context.Value(tlsAuth{}).(*tls.Config); ok && v != nil {
-			return credentials.NewTLS(v)
-		}
+	if g.opts.TLSConfig != nil {
+		return credentials.NewTLS(g.opts.TLSConfig)
 	}
 	return nil
 }

@@ -2,7 +2,6 @@ package grpc
 
 import (
 	"context"
-	"crypto/tls"
 
 	"github.com/unistack-org/micro/v3/server"
 	"google.golang.org/grpc"
@@ -12,7 +11,6 @@ import (
 type codecsKey struct{}
 type grpcOptions struct{}
 type maxMsgSizeKey struct{}
-type tlsAuth struct{}
 type reflectionKey struct{}
 
 // gRPC Codec to be used to encode/decode requests for a given content type
@@ -28,11 +26,6 @@ func Codec(contentType string, c encoding.Codec) server.Option {
 		codecs[contentType] = c
 		o.Context = context.WithValue(o.Context, codecsKey{}, codecs)
 	}
-}
-
-// AuthTLS should be used to setup a secure authentication using TLS
-func AuthTLS(t *tls.Config) server.Option {
-	return setServerOption(tlsAuth{}, t)
 }
 
 // Options to be used to configure gRPC options
