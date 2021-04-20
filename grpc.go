@@ -636,11 +636,9 @@ func (g *grpcServer) Register() error {
 	g.RLock()
 	// Maps are ordered randomly, sort the keys for consistency
 	var handlerList []string
-	for n, e := range g.handlers {
+	for n, _ := range g.handlers {
 		// Only advertise non internal handlers
-		if !e.Options().Internal {
-			handlerList = append(handlerList, n)
-		}
+		handlerList = append(handlerList, n)
 	}
 
 	sort.Strings(handlerList)
@@ -648,9 +646,7 @@ func (g *grpcServer) Register() error {
 	var subscriberList []*subscriber
 	for e := range g.subscribers {
 		// Only advertise non internal subscribers
-		if !e.Options().Internal {
-			subscriberList = append(subscriberList, e)
-		}
+		subscriberList = append(subscriberList, e)
 	}
 	sort.Slice(subscriberList, func(i, j int) bool {
 		return subscriberList[i].topic > subscriberList[j].topic
