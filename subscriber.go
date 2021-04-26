@@ -15,14 +15,10 @@ import (
 	"github.com/unistack-org/micro/v3/server"
 )
 
-const (
-	subSig = "func(context.Context, interface{}) error"
-)
-
 type handler struct {
-	method  reflect.Value
 	reqType reflect.Type
 	ctxType reflect.Type
+	method  reflect.Value
 }
 
 type subscriber struct {
@@ -195,14 +191,14 @@ func (g *grpcServer) createSubHandler(sb *subscriber, opts server.Options) broke
 				if g.wg != nil {
 					defer g.wg.Done()
 				}
-				err := fn(ctx, &rpcMessage{
+				cerr := fn(ctx, &rpcMessage{
 					topic:       sb.topic,
 					contentType: ct,
 					payload:     req.Interface(),
 					header:      msg.Header,
 					body:        msg.Body,
 				})
-				results <- err
+				results <- cerr
 			}()
 		}
 		var errors []string

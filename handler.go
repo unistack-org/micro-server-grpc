@@ -8,13 +8,13 @@ import (
 )
 
 type rpcHandler struct {
-	name      string
-	handler   interface{}
-	endpoints []*register.Endpoint
 	opts      server.HandlerOptions
+	handler   interface{}
+	name      string
+	endpoints []*register.Endpoint
 }
 
-func newRpcHandler(handler interface{}, opts ...server.HandlerOption) server.Handler {
+func newRPCHandler(handler interface{}, opts ...server.HandlerOption) server.Handler {
 	options := server.NewHandlerOptions(opts...)
 
 	typ := reflect.TypeOf(handler)

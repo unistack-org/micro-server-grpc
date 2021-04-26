@@ -8,10 +8,12 @@ import (
 	"google.golang.org/grpc/encoding"
 )
 
-type codecsKey struct{}
-type grpcOptions struct{}
-type maxMsgSizeKey struct{}
-type reflectionKey struct{}
+type (
+	codecsKey     struct{}
+	grpcOptions   struct{}
+	maxMsgSizeKey struct{}
+	reflectionKey struct{}
+)
 
 // gRPC Codec to be used to encode/decode requests for a given content type
 func Codec(contentType string, c encoding.Codec) server.Option {

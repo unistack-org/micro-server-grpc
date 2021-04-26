@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	// nolint: staticcheck
 	oldproto "github.com/golang/protobuf/proto"
 	"github.com/unistack-org/micro/v3/broker"
 	"github.com/unistack-org/micro/v3/codec"
@@ -29,7 +30,6 @@ import (
 	"google.golang.org/grpc/encoding"
 	gmetadata "google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/peer"
-	grpcreflect "google.golang.org/grpc/reflection/grpc_reflection_v1alpha"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 )
@@ -38,32 +38,27 @@ const (
 	defaultContentType = "application/grpc"
 )
 
+/*
 type grpcServerReflection struct {
 	srv *grpc.Server
 	s   *serverReflectionServer
 }
+*/
 
 type grpcServer struct {
-	rpc  *rServer
-	srv  *grpc.Server
-	exit chan chan error
-	wg   *sync.WaitGroup
-
-	sync.RWMutex
-	opts        server.Options
 	handlers    map[string]server.Handler
+	srv         *grpc.Server
+	exit        chan chan error
+	wg          *sync.WaitGroup
+	rsvc        *register.Service
 	subscribers map[*subscriber][]broker.Subscriber
-	init        bool
-	// marks the serve as started
-	started bool
-	// used for first registration
+	rpc         *rServer
+	opts        server.Options
+	sync.RWMutex
+	init       bool
+	started    bool
 	registered bool
-
 	reflection bool
-	// register service instance
-	rsvc *register.Service
-
-	codecs map[string]codec.Codec
 }
 
 func newGRPCServer(opts ...server.Option) server.Server {
@@ -292,25 +287,27 @@ func (g *grpcServer) handler(srv interface{}, stream grpc.ServerStream) (err err
 	svc := g.rpc.serviceMap[serviceName]
 	g.rpc.mu.RUnlock()
 
-	if svc == nil && g.reflection && methodName == "ServerReflectionInfo" {
-		rfl := &grpcServerReflection{srv: g.srv, s: &serverReflectionServer{s: g.srv}}
-		svc = &service{}
-		svc.typ = reflect.TypeOf(rfl)
-		svc.rcvr = reflect.ValueOf(rfl)
-		svc.name = reflect.Indirect(svc.rcvr).Type().Name()
-		svc.method = make(map[string]*methodType)
-		typ := reflect.TypeOf(rfl)
-		if me, ok := typ.MethodByName("ServerReflectionInfo"); ok {
-			g.rpc.mu.Lock()
-			ep, err := prepareEndpoint(me)
-			if ep != nil && err != nil {
-				svc.method["ServerReflectionInfo"] = ep
-			} else if err != nil {
-				return status.New(codes.Unimplemented, err.Error()).Err()
+	/*
+		if svc == nil && g.reflection && methodName == "ServerReflectionInfo" {
+			rfl := &grpcServerReflection{srv: g.srv, s: &serverReflectionServer{s: g.srv}}
+			svc = &service{}
+			svc.typ = reflect.TypeOf(rfl)
+			svc.rcvr = reflect.ValueOf(rfl)
+			svc.name = reflect.Indirect(svc.rcvr).Type().Name()
+			svc.method = make(map[string]*methodType)
+			typ := reflect.TypeOf(rfl)
+			if me, ok := typ.MethodByName("ServerReflectionInfo"); ok {
+				g.rpc.mu.Lock()
+				ep, err := prepareEndpoint(me)
+				if ep != nil && err != nil {
+					svc.method["ServerReflectionInfo"] = ep
+				} else if err != nil {
+					return status.New(codes.Unimplemented, err.Error()).Err()
+				}
+				g.rpc.mu.Unlock()
 			}
-			g.rpc.mu.Unlock()
 		}
-	}
+	*/
 
 	if svc == nil {
 		return status.New(codes.Unimplemented, fmt.Sprintf("unknown service %s", serviceName)).Err()
@@ -323,117 +320,118 @@ func (g *grpcServer) handler(srv interface{}, stream grpc.ServerStream) (err err
 
 	// process unary
 	if !mtype.stream {
-		return g.processRequest(stream, svc, mtype, ct, ctx)
+		return g.processRequest(ctx, stream, svc, mtype, ct)
 	}
 
 	// process stream
-	return g.processStream(stream, svc, mtype, ct, ctx)
+	return g.processStream(ctx, stream, svc, mtype, ct)
 }
 
-func (g *grpcServer) processRequest(stream grpc.ServerStream, service *service, mtype *methodType, ct string, ctx context.Context) error {
-	for {
-		var argv, replyv reflect.Value
+func (g *grpcServer) processRequest(ctx context.Context, stream grpc.ServerStream, service *service, mtype *methodType, ct string) error {
+	// for {
+	var argv, replyv reflect.Value
 
-		// Decode the argument value.
-		argIsValue := false // if true, need to indirect before calling.
-		if mtype.ArgType.Kind() == reflect.Ptr {
-			argv = reflect.New(mtype.ArgType.Elem())
-		} else {
-			argv = reflect.New(mtype.ArgType)
-			argIsValue = true
-		}
-
-		// Unmarshal request
-		if err := stream.RecvMsg(argv.Interface()); err != nil {
-			return err
-		}
-
-		if argIsValue {
-			argv = argv.Elem()
-		}
-
-		// reply value
-		replyv = reflect.New(mtype.ReplyType.Elem())
-
-		function := mtype.method.Func
-		var returnValues []reflect.Value
-
-		cf, err := g.newCodec(ct)
-		if err != nil {
-			return errors.InternalServerError(g.opts.Name, err.Error())
-		}
-		b, err := cf.Marshal(argv.Interface())
-		if err != nil {
-			return err
-		}
-
-		// create a client.Request
-		r := &rpcRequest{
-			service:     g.opts.Name,
-			contentType: ct,
-			method:      fmt.Sprintf("%s.%s", service.name, mtype.method.Name),
-			body:        b,
-			payload:     argv.Interface(),
-		}
-		// define the handler func
-		fn := func(ctx context.Context, req server.Request, rsp interface{}) (err error) {
-			returnValues = function.Call([]reflect.Value{service.rcvr, mtype.prepareContext(ctx), reflect.ValueOf(argv.Interface()), reflect.ValueOf(rsp)})
-
-			// The return value for the method is an error.
-			if rerr := returnValues[0].Interface(); rerr != nil {
-				err = rerr.(error)
-			}
-
-			return err
-		}
-
-		// wrap the handler func
-		for i := len(g.opts.HdlrWrappers); i > 0; i-- {
-			fn = g.opts.HdlrWrappers[i-1](fn)
-		}
-
-		statusCode := codes.OK
-		statusDesc := ""
-		// execute the handler
-		if appErr := fn(ctx, r, replyv.Interface()); appErr != nil {
-			var errStatus *status.Status
-			switch verr := appErr.(type) {
-			case *errors.Error:
-				statusCode = microError(verr)
-				statusDesc = verr.Error()
-				errStatus = status.New(statusCode, statusDesc)
-			case proto.Message:
-				// user defined error that proto based we can attach it to grpc status
-				statusCode = convertCode(appErr)
-				statusDesc = appErr.Error()
-				errStatus, err = status.New(statusCode, statusDesc).WithDetails(oldproto.MessageV1(verr))
-				if err != nil {
-					return err
-				}
-			default:
-				g.RLock()
-				config := g.opts
-				g.RUnlock()
-				if config.Logger.V(logger.ErrorLevel) {
-					config.Logger.Warn(config.Context, "handler error will not be transferred properly, must return *errors.Error or proto.Message")
-				}
-				// default case user pass own error type that not proto based
-				statusCode = convertCode(verr)
-				statusDesc = verr.Error()
-				errStatus = status.New(statusCode, statusDesc)
-			}
-
-			return errStatus.Err()
-		}
-
-		if err := stream.SendMsg(replyv.Interface()); err != nil {
-			return err
-		}
-
-		return status.New(statusCode, statusDesc).Err()
+	// Decode the argument value.
+	argIsValue := false // if true, need to indirect before calling.
+	if mtype.ArgType.Kind() == reflect.Ptr {
+		argv = reflect.New(mtype.ArgType.Elem())
+	} else {
+		argv = reflect.New(mtype.ArgType)
+		argIsValue = true
 	}
+
+	// Unmarshal request
+	if err := stream.RecvMsg(argv.Interface()); err != nil {
+		return err
+	}
+
+	if argIsValue {
+		argv = argv.Elem()
+	}
+
+	// reply value
+	replyv = reflect.New(mtype.ReplyType.Elem())
+
+	function := mtype.method.Func
+	var returnValues []reflect.Value
+
+	cf, err := g.newCodec(ct)
+	if err != nil {
+		return errors.InternalServerError(g.opts.Name, err.Error())
+	}
+	b, err := cf.Marshal(argv.Interface())
+	if err != nil {
+		return err
+	}
+
+	// create a client.Request
+	r := &rpcRequest{
+		service:     g.opts.Name,
+		contentType: ct,
+		method:      fmt.Sprintf("%s.%s", service.name, mtype.method.Name),
+		body:        b,
+		payload:     argv.Interface(),
+	}
+	// define the handler func
+	fn := func(ctx context.Context, req server.Request, rsp interface{}) (err error) {
+		returnValues = function.Call([]reflect.Value{service.rcvr, mtype.prepareContext(ctx), reflect.ValueOf(argv.Interface()), reflect.ValueOf(rsp)})
+
+		// The return value for the method is an error.
+		if rerr := returnValues[0].Interface(); rerr != nil {
+			err = rerr.(error)
+		}
+
+		return err
+	}
+
+	// wrap the handler func
+	for i := len(g.opts.HdlrWrappers); i > 0; i-- {
+		fn = g.opts.HdlrWrappers[i-1](fn)
+	}
+
+	statusCode := codes.OK
+	statusDesc := ""
+	// execute the handler
+	if appErr := fn(ctx, r, replyv.Interface()); appErr != nil {
+		var errStatus *status.Status
+		switch verr := appErr.(type) {
+		case *errors.Error:
+			statusCode = microError(verr)
+			statusDesc = verr.Error()
+			errStatus = status.New(statusCode, statusDesc)
+		case proto.Message:
+			// user defined error that proto based we can attach it to grpc status
+			statusCode = convertCode(appErr)
+			statusDesc = appErr.Error()
+			errStatus, err = status.New(statusCode, statusDesc).WithDetails(oldproto.MessageV1(verr))
+			if err != nil {
+				return err
+			}
+		default:
+			g.RLock()
+			config := g.opts
+			g.RUnlock()
+			if config.Logger.V(logger.ErrorLevel) {
+				config.Logger.Warn(config.Context, "handler error will not be transferred properly, must return *errors.Error or proto.Message")
+			}
+			// default case user pass own error type that not proto based
+			statusCode = convertCode(verr)
+			statusDesc = verr.Error()
+			errStatus = status.New(statusCode, statusDesc)
+		}
+
+		return errStatus.Err()
+	}
+
+	if err := stream.SendMsg(replyv.Interface()); err != nil {
+		return err
+	}
+
+	return status.New(statusCode, statusDesc).Err()
+	//	}
 }
 
+/*
 type reflectStream struct {
 	stream server.Stream
 }
@@ -475,8 +473,9 @@ func (s *reflectStream) RecvMsg(m interface{}) error {
 func (g *grpcServerReflection) ServerReflectionInfo(ctx context.Context, stream server.Stream) error {
 	return g.s.ServerReflectionInfo(&reflectStream{stream})
 }
+*/
 
-func (g *grpcServer) processStream(stream grpc.ServerStream, service *service, mtype *methodType, ct string, ctx context.Context) error {
+func (g *grpcServer) processStream(ctx context.Context, stream grpc.ServerStream, service *service, mtype *methodType, ct string) error {
 	opts := g.opts
 
 	r := &rpcRequest{
@@ -574,7 +573,7 @@ func (g *grpcServer) Init(opts ...server.Option) error {
 }
 
 func (g *grpcServer) NewHandler(h interface{}, opts ...server.HandlerOption) server.Handler {
-	return newRpcHandler(h, opts...)
+	return newRPCHandler(h, opts...)
 }
 
 func (g *grpcServer) Handle(h server.Handler) error {
@@ -635,15 +634,15 @@ func (g *grpcServer) Register() error {
 
 	g.RLock()
 	// Maps are ordered randomly, sort the keys for consistency
-	var handlerList []string
-	for n, _ := range g.handlers {
+	handlerList := make([]string, 0, len(g.handlers))
+	for n := range g.handlers {
 		// Only advertise non internal handlers
 		handlerList = append(handlerList, n)
 	}
 
 	sort.Strings(handlerList)
 
-	var subscriberList []*subscriber
+	subscriberList := make([]*subscriber, 0, len(g.subscribers))
 	for e := range g.subscribers {
 		// Only advertise non internal subscribers
 		subscriberList = append(subscriberList, e)
@@ -662,7 +661,7 @@ func (g *grpcServer) Register() error {
 	g.RUnlock()
 
 	service.Nodes[0].Metadata["protocol"] = "grpc"
-	service.Nodes[0].Metadata["transport"] = "grpc"
+	service.Nodes[0].Metadata["transport"] = service.Nodes[0].Metadata["protocol"]
 	service.Endpoints = endpoints
 
 	g.RLock()
@@ -836,6 +835,7 @@ func (g *grpcServer) Start() error {
 	}
 
 	// use RegisterCheck func before register
+	// nolint: nestif
 	if err := g.opts.RegisterCheck(config.Context); err != nil {
 		if config.Logger.V(logger.ErrorLevel) {
 			config.Logger.Errorf(config.Context, "Server %s-%s register check error: %s", config.Name, config.Id, err)
@@ -884,6 +884,7 @@ func (g *grpcServer) Start() error {
 				registered := g.registered
 				g.RUnlock()
 				rerr := g.opts.RegisterCheck(g.opts.Context)
+				// nolint: nestif
 				if rerr != nil && registered {
 					if config.Logger.V(logger.ErrorLevel) {
 						config.Logger.Errorf(config.Context, "Server %s-%s register check error: %s, deregister it", config.Name, config.Id, rerr)

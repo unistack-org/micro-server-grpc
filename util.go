@@ -39,6 +39,7 @@ func serviceMethod(m string) (string, string, error) {
 	return parts[0], parts[1], nil
 }
 
+/*
 // ServiceFromMethod returns the service
 // /service.Foo/Bar => service
 func serviceFromMethod(m string) string {
@@ -55,3 +56,4 @@ func serviceFromMethod(m string) string {
 	parts = strings.Split(parts[1], ".")
 	return strings.Join(parts[:len(parts)-1], ".")
 }
+*/

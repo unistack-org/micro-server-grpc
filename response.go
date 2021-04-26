@@ -5,16 +5,15 @@ import (
 
 	"github.com/unistack-org/micro/v3/codec"
 	"github.com/unistack-org/micro/v3/metadata"
+	"github.com/unistack-org/micro/v3/server"
 )
 
+var _ server.Response = &rpcResponse{}
+
 type rpcResponse struct {
-	rw       io.ReadWriter
-	header   metadata.Metadata
-	codec    codec.Codec
-	endpoint string
-	service  string
-	method   string
-	target   string
+	rw     io.ReadWriter
+	header metadata.Metadata
+	codec  codec.Codec
 }
 
 func (r *rpcResponse) Codec() codec.Codec {
