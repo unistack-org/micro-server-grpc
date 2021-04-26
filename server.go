@@ -17,34 +17,32 @@ import (
 	"github.com/unistack-org/micro/v3/server"
 )
 
-var (
-	// Precompute the reflect type for error. Can't use error directly
-	// because Typeof takes an empty interface value. This is annoying.
-	typeOfError = reflect.TypeOf((*error)(nil)).Elem()
-)
+// Precompute the reflect type for error. Can't use error directly
+// because Typeof takes an empty interface value. This is annoying.
+var typeOfError = reflect.TypeOf((*error)(nil)).Elem()
 
 type methodType struct {
-	method      reflect.Method
 	ArgType     reflect.Type
 	ReplyType   reflect.Type
 	ContextType reflect.Type
+	method      reflect.Method
 	stream      bool
 }
 
-type reflectionType func(context.Context, server.Stream) error
+// type reflectionType func(context.Context, server.Stream) error
 
 type service struct {
-	name   string                 // name of service
-	rcvr   reflect.Value          // receiver of methods for the service
-	typ    reflect.Type           // type of the receiver
-	method map[string]*methodType // registered methods
+	typ    reflect.Type
+	method map[string]*methodType
+	rcvr   reflect.Value
+	name   string
 }
 
 // server represents an RPC Server.
 type rServer struct {
-	mu         sync.RWMutex // protects the serviceMap
 	serviceMap map[string]*service
-	reflection bool
+	mu         sync.RWMutex
+	// reflection bool
 }
 
 // Is this an exported - upper case - name?
@@ -91,15 +89,14 @@ func prepareEndpoint(method reflect.Method) (*methodType, error) {
 		return nil, fmt.Errorf("method %v of %v has wrong number of ins: %v", mname, mtype, mtype.NumIn())
 	}
 
-	if stream {
+	switch stream {
+	case true:
 		// check stream type
 		streamType := reflect.TypeOf((*server.Stream)(nil)).Elem()
 		if !argType.Implements(streamType) {
 			return nil, fmt.Errorf("%v argument does not implement Streamer interface: %v", mname, argType)
 		}
-	} else {
-		// if not stream check the replyType
-
+	default:
 		// First arg need not be a pointer.
 		if !isExportedOrBuiltinType(argType) {
 			return nil, fmt.Errorf("%v argument type not exported: %v", mname, argType)
