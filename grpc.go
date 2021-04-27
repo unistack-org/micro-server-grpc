@@ -670,7 +670,7 @@ func (g *grpcServer) Register() error {
 
 	if !registered {
 		if config.Logger.V(logger.InfoLevel) {
-			config.Logger.Infof(config.Context, "Register [%s] Registering node: %s", config.Register.String(), service.Nodes[0].Id)
+			config.Logger.Infof(config.Context, "Register [%s] Registering node: %s", config.Register.String(), service.Nodes[0].ID)
 		}
 	}
 
@@ -730,7 +730,7 @@ func (g *grpcServer) Deregister() error {
 	}
 
 	if config.Logger.V(logger.InfoLevel) {
-		config.Logger.Infof(config.Context, "Deregistering node: %s", service.Nodes[0].Id)
+		config.Logger.Infof(config.Context, "Deregistering node: %s", service.Nodes[0].ID)
 	}
 
 	if err := server.DefaultDeregisterFunc(service, config); err != nil {
@@ -838,7 +838,7 @@ func (g *grpcServer) Start() error {
 	// nolint: nestif
 	if err := g.opts.RegisterCheck(config.Context); err != nil {
 		if config.Logger.V(logger.ErrorLevel) {
-			config.Logger.Errorf(config.Context, "Server %s-%s register check error: %s", config.Name, config.Id, err)
+			config.Logger.Errorf(config.Context, "Server %s-%s register check error: %s", config.Name, config.ID, err)
 		}
 	} else {
 		// announce self to the world
@@ -887,23 +887,23 @@ func (g *grpcServer) Start() error {
 				// nolint: nestif
 				if rerr != nil && registered {
 					if config.Logger.V(logger.ErrorLevel) {
-						config.Logger.Errorf(config.Context, "Server %s-%s register check error: %s, deregister it", config.Name, config.Id, rerr)
+						config.Logger.Errorf(config.Context, "Server %s-%s register check error: %s, deregister it", config.Name, config.ID, rerr)
 					}
 					// deregister self in case of error
 					if err := g.Deregister(); err != nil {
 						if config.Logger.V(logger.ErrorLevel) {
-							config.Logger.Errorf(config.Context, "Server %s-%s deregister error: %s", config.Name, config.Id, err)
+							config.Logger.Errorf(config.Context, "Server %s-%s deregister error: %s", config.Name, config.ID, err)
 						}
 					}
 				} else if rerr != nil && !registered {
 					if config.Logger.V(logger.ErrorLevel) {
-						config.Logger.Errorf(config.Context, "Server %s-%s register check error: %s", config.Name, config.Id, rerr)
+						config.Logger.Errorf(config.Context, "Server %s-%s register check error: %s", config.Name, config.ID, rerr)
 					}
 					continue
 				}
 				if err := g.Register(); err != nil {
 					if config.Logger.V(logger.ErrorLevel) {
-						config.Logger.Errorf(config.Context, "Server %s-%s register error: %s", config.Name, config.Id, err)
+						config.Logger.Errorf(config.Context, "Server %s-%s register error: %s", config.Name, config.ID, err)
 					}
 				}
 			// wait for exit
@@ -915,7 +915,7 @@ func (g *grpcServer) Start() error {
 		// deregister self
 		if err := g.Deregister(); err != nil {
 			if config.Logger.V(logger.ErrorLevel) {
-				config.Logger.Errorf(config.Context, "Server deregister error: ", err)
+				config.Logger.Errorf(config.Context, "Server deregister error: %v", err)
 			}
 		}
 
