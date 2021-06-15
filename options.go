@@ -32,7 +32,7 @@ func Codec(contentType string, c encoding.Codec) server.Option {
 
 // Options to be used to configure gRPC options
 func Options(opts ...grpc.ServerOption) server.Option {
-	return setServerOption(grpcOptions{}, opts)
+	return server.SetOption(grpcOptions{}, opts)
 }
 
 //
@@ -40,10 +40,10 @@ func Options(opts ...grpc.ServerOption) server.Option {
 // send.  Default maximum message size is 4 MB.
 //
 func MaxMsgSize(s int) server.Option {
-	return setServerOption(maxMsgSizeKey{}, s)
+	return server.SetOption(maxMsgSizeKey{}, s)
 }
 
 // Reflection enables reflection support in grpc server
 func Reflection(b bool) server.Option {
-	return setServerOption(reflectionKey{}, b)
+	return server.SetOption(reflectionKey{}, b)
 }
