@@ -787,12 +787,11 @@ func (g *grpcServer) Start() error {
 
 	// micro: config.Transport.Listen(config.Address)
 	var ts net.Listener
+	var err error
 
 	if l := config.Listener; l != nil {
 		ts = l
 	} else {
-		var err error
-
 		// check the tls config for secure connect
 		if tc := config.TLSConfig; tc != nil {
 			ts, err = tls.Listen("tcp", config.Address, tc)
@@ -822,7 +821,7 @@ func (g *grpcServer) Start() error {
 	// only connect if we're subscribed
 	if len(g.subscribers) > 0 {
 		// connect to the broker
-		if err := config.Broker.Connect(config.Context); err != nil {
+		if err = config.Broker.Connect(config.Context); err != nil {
 			if config.Logger.V(logger.ErrorLevel) {
 				config.Logger.Errorf(config.Context, "Broker [%s] connect error: %v", config.Broker.String(), err)
 			}
@@ -836,13 +835,13 @@ func (g *grpcServer) Start() error {
 
 	// use RegisterCheck func before register
 	// nolint: nestif
-	if err := g.opts.RegisterCheck(config.Context); err != nil {
+	if err = g.opts.RegisterCheck(config.Context); err != nil {
 		if config.Logger.V(logger.ErrorLevel) {
 			config.Logger.Errorf(config.Context, "Server %s-%s register check error: %s", config.Name, config.ID, err)
 		}
 	} else {
 		// announce self to the world
-		if err := g.Register(); err != nil {
+		if err = g.Register(); err != nil {
 			if config.Logger.V(logger.ErrorLevel) {
 				config.Logger.Errorf(config.Context, "Server register error: %v", err)
 			}
@@ -851,11 +850,11 @@ func (g *grpcServer) Start() error {
 
 	// micro: go ts.Accept(s.accept)
 	go func() {
-		if err := g.srv.Serve(ts); err != nil {
+		if err = g.srv.Serve(ts); err != nil {
 			if config.Logger.V(logger.ErrorLevel) {
 				config.Logger.Errorf(config.Context, "gRPC Server start error: %v", err)
 			}
-			if err := g.Stop(); err != nil {
+			if err = g.Stop(); err != nil {
 				if config.Logger.V(logger.ErrorLevel) {
 					config.Logger.Errorf(config.Context, "gRPC Server stop error: %v", err)
 				}
@@ -890,7 +889,7 @@ func (g *grpcServer) Start() error {
 						config.Logger.Errorf(config.Context, "Server %s-%s register check error: %s, deregister it", config.Name, config.ID, rerr)
 					}
 					// deregister self in case of error
-					if err := g.Deregister(); err != nil {
+					if err = g.Deregister(); err != nil {
 						if config.Logger.V(logger.ErrorLevel) {
 							config.Logger.Errorf(config.Context, "Server %s-%s deregister error: %s", config.Name, config.ID, err)
 						}
@@ -901,7 +900,7 @@ func (g *grpcServer) Start() error {
 					}
 					continue
 				}
-				if err := g.Register(); err != nil {
+				if err = g.Register(); err != nil {
 					if config.Logger.V(logger.ErrorLevel) {
 						config.Logger.Errorf(config.Context, "Server %s-%s register error: %s", config.Name, config.ID, err)
 					}
@@ -913,7 +912,7 @@ func (g *grpcServer) Start() error {
 		}
 
 		// deregister self
-		if err := g.Deregister(); err != nil {
+		if err = g.Deregister(); err != nil {
 			if config.Logger.V(logger.ErrorLevel) {
 				config.Logger.Errorf(config.Context, "Server deregister error: %v", err)
 			}
@@ -945,7 +944,7 @@ func (g *grpcServer) Start() error {
 			config.Logger.Infof(config.Context, "Broker [%s] Disconnected from %s", config.Broker.String(), config.Broker.Address())
 		}
 		// disconnect broker
-		if err := config.Broker.Disconnect(config.Context); err != nil {
+		if err = config.Broker.Disconnect(config.Context); err != nil {
 			if config.Logger.V(logger.ErrorLevel) {
 				config.Logger.Errorf(config.Context, "Broker [%s] disconnect error: %v", config.Broker.String(), err)
 			}
