@@ -4,8 +4,8 @@ go 1.16
 
 require (
 	github.com/golang/protobuf v1.5.2
-	github.com/unistack-org/micro/v3 v3.7.4
-	golang.org/x/net v0.0.0-20210510120150-4163338589ed
+	github.com/unistack-org/micro/v3 v3.7.8
+	golang.org/x/net v0.0.0-20210928044308-7d9f5e0b762b
 	google.golang.org/grpc v1.40.0
 	google.golang.org/protobuf v1.27.1
 )
