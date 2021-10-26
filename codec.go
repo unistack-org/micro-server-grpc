@@ -3,7 +3,7 @@ package grpc
 import (
 	"io"
 
-	"github.com/unistack-org/micro/v3/codec"
+	"go.unistack.org/micro/v3/codec"
 	"google.golang.org/grpc/encoding"
 )
 
