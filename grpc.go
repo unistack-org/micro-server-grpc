@@ -1,5 +1,5 @@
 // Package grpc provides a grpc server
-package grpc
+package grpc // import "go.unistack.org/micro-server-grpc/v3"
 
 import (
 	"context"
