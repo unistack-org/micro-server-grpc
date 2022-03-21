@@ -122,8 +122,8 @@ func (g *grpcServer) createSubHandler(sb *subscriber, opts server.Options) broke
 
 		ct := msg.Header["Content-Type"]
 		if len(ct) == 0 {
-			msg.Header["Content-Type"] = defaultContentType
-			ct = defaultContentType
+			msg.Header["Content-Type"] = DefaultContentType
+			ct = DefaultContentType
 		}
 		cf, err := g.newCodec(ct)
 		if err != nil {
