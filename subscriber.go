@@ -171,7 +171,7 @@ func (g *grpcServer) createSubHandler(sb *subscriber, opts server.Options) broke
 					vals = append(vals, reflect.ValueOf(ctx))
 				}
 
-				vals = append(vals, reflect.ValueOf(msg.Payload()))
+				vals = append(vals, reflect.ValueOf(msg.Body()))
 
 				returnValues := handler.method.Call(vals)
 				if rerr := returnValues[0].Interface(); rerr != nil {
@@ -196,7 +196,6 @@ func (g *grpcServer) createSubHandler(sb *subscriber, opts server.Options) broke
 					contentType: ct,
 					payload:     req.Interface(),
 					header:      msg.Header,
-					body:        msg.Body,
 				})
 				results <- cerr
 			}()

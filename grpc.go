@@ -329,6 +329,7 @@ func (g *grpcServer) handler(srv interface{}, stream grpc.ServerStream) (err err
 
 func (g *grpcServer) processRequest(ctx context.Context, stream grpc.ServerStream, service *service, mtype *methodType, ct string) error {
 	// for {
+	var err error
 	var argv, replyv reflect.Value
 
 	// Decode the argument value.
@@ -355,21 +356,11 @@ func (g *grpcServer) processRequest(ctx context.Context, stream grpc.ServerStrea
 	function := mtype.method.Func
 	var returnValues []reflect.Value
 
-	cf, err := g.newCodec(ct)
-	if err != nil {
-		return errors.InternalServerError(g.opts.Name, err.Error())
-	}
-	b, err := cf.Marshal(argv.Interface())
-	if err != nil {
-		return err
-	}
-
 	// create a client.Request
 	r := &rpcRequest{
 		service:     g.opts.Name,
 		contentType: ct,
 		method:      fmt.Sprintf("%s.%s", service.name, mtype.method.Name),
-		body:        b,
 		payload:     argv.Interface(),
 	}
 	// define the handler func
