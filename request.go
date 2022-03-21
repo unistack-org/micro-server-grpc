@@ -22,7 +22,6 @@ type rpcRequest struct {
 	endpoint    string
 	contentType string
 	service     string
-	body        []byte
 	stream      bool
 }
 
@@ -83,16 +82,12 @@ func (r *rpcMessage) Topic() string {
 	return r.topic
 }
 
-func (r *rpcMessage) Payload() interface{} {
+func (r *rpcMessage) Body() interface{} {
 	return r.payload
 }
 
 func (r *rpcMessage) Header() metadata.Metadata {
 	return r.header
-}
-
-func (r *rpcMessage) Body() []byte {
-	return r.body
 }
 
 func (r *rpcMessage) Codec() codec.Codec {
