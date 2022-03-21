@@ -35,7 +35,7 @@ import (
 )
 
 const (
-	defaultContentType = "application/grpc+proto"
+	DefaultContentType = "application/grpc+proto"
 )
 
 /*
@@ -249,14 +249,33 @@ func (g *grpcServer) handler(srv interface{}, stream grpc.ServerStream) (err err
 		md.Set(k, strings.Join(v, ", "))
 	}
 
+	var td string
 	// timeout for server deadline
-	to, ok := md.Get("timeout")
-	if ok {
+	if v, ok := md.Get("timeout"); ok {
 		md.Del("timeout")
+		td = v
+	}
+	if v, ok := md.Get("Grpc-Timeout"); ok {
+		md.Del("Grpc-Timeout")
+		td = v[:len(v)-1]
+		switch v[:] {
+		case "S":
+			td += "s"
+		case "M":
+			td += "m"
+		case "H":
+			td += "h"
+		case "m":
+			td += "ms"
+		case "u":
+			td += "us"
+		case "n":
+			td += "ns"
+		}
 	}
 
 	// get content type
-	ct := defaultContentType
+	ct := DefaultContentType
 
 	if ctype, ok := md.Get("content-type"); ok {
 		ct = ctype
@@ -275,8 +294,8 @@ func (g *grpcServer) handler(srv interface{}, stream grpc.ServerStream) (err err
 	}
 
 	// set the timeout if we have it
-	if len(to) > 0 {
-		if n, err := strconv.ParseUint(to, 10, 64); err == nil {
+	if len(td) > 0 {
+		if n, err := strconv.ParseUint(td, 10, 64); err == nil {
 			var cancel context.CancelFunc
 			ctx, cancel = context.WithTimeout(ctx, time.Duration(n))
 			defer cancel()
@@ -342,6 +361,7 @@ func (g *grpcServer) processRequest(ctx context.Context, stream grpc.ServerStrea
 	}
 
 	// Unmarshal request
+	// TODO: avoid Marshal call later by recv to frame and reuse it data
 	if err := stream.RecvMsg(argv.Interface()); err != nil {
 		return err
 	}
