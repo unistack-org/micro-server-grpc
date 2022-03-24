@@ -9,10 +9,11 @@ import (
 )
 
 type (
-	codecsKey     struct{}
-	grpcOptions   struct{}
-	maxMsgSizeKey struct{}
-	reflectionKey struct{}
+	codecsKey                struct{}
+	grpcOptions              struct{}
+	maxMsgSizeKey            struct{}
+	reflectionKey            struct{}
+	unknownServiceHandlerKey struct{}
 )
 
 // gRPC Codec to be used to encode/decode requests for a given content type
@@ -37,8 +38,7 @@ func Options(opts ...grpc.ServerOption) server.Option {
 
 //
 // MaxMsgSize set the maximum message in bytes the server can receive and
-// send.  Default maximum message size is 4 MB.
-//
+// send. Default maximum message size is 4 MB.
 func MaxMsgSize(s int) server.Option {
 	return server.SetOption(maxMsgSizeKey{}, s)
 }
@@ -46,4 +46,9 @@ func MaxMsgSize(s int) server.Option {
 // Reflection enables reflection support in grpc server
 func Reflection(b bool) server.Option {
 	return server.SetOption(reflectionKey{}, b)
+}
+
+// UnknownServiceHandler enables support for all services
+func UnknownServiceHandler(h grpc.StreamHandler) server.Option {
+	return server.SetOption(unknownServiceHandlerKey{}, h)
 }
