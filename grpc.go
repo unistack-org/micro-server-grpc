@@ -145,7 +145,7 @@ func (g *grpcServer) configure(opts ...server.Option) error {
 	}
 
 	if opts := g.getGrpcOptions(); opts != nil {
-		gopts = append(gopts, opts...)
+		gopts = append(opts, gopts...)
 	}
 
 	g.rsvc = nil
@@ -329,12 +329,22 @@ func (g *grpcServer) handler(srv interface{}, stream grpc.ServerStream) (err err
 	*/
 
 	if svc == nil {
+		if g.opts.Context != nil {
+			if h, ok := g.opts.Context.Value(unknownServiceHandlerKey{}).(grpc.StreamHandler); ok {
+				return h(srv, stream)
+			}
+		}
 		return status.New(codes.Unimplemented, fmt.Sprintf("unknown service %s", serviceName)).Err()
 	}
 
 	mtype := svc.method[methodName]
 	if mtype == nil {
-		return status.New(codes.Unimplemented, fmt.Sprintf("unknown service %s.%s", serviceName, methodName)).Err()
+		if g.opts.Context != nil {
+			if h, ok := g.opts.Context.Value(unknownServiceHandlerKey{}).(grpc.StreamHandler); ok {
+				return h(srv, stream)
+			}
+		}
+		return status.New(codes.Unimplemented, fmt.Sprintf("unknown service method %s.%s", serviceName, methodName)).Err()
 	}
 
 	// process unary
