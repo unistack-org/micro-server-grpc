@@ -55,7 +55,6 @@ type grpcServer struct {
 	rpc         *rServer
 	opts        server.Options
 	sync.RWMutex
-	init       bool
 	started    bool
 	registered bool
 	reflection bool
@@ -165,8 +164,6 @@ func (g *grpcServer) configure(opts ...server.Option) error {
 	if restart {
 		return g.Start()
 	}
-
-	g.init = true
 
 	return nil
 }
@@ -587,7 +584,7 @@ func (g *grpcServer) Options() server.Options {
 }
 
 func (g *grpcServer) Init(opts ...server.Option) error {
-	if len(opts) == 0 && g.init {
+	if len(opts) == 0 {
 		return nil
 	}
 	return g.configure(opts...)
