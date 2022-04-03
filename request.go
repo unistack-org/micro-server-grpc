@@ -31,7 +31,6 @@ type rpcMessage struct {
 	header      metadata.Metadata
 	topic       string
 	contentType string
-	body        []byte
 }
 
 func (r *rpcRequest) ContentType() string {
