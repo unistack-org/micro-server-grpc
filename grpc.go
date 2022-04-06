@@ -425,6 +425,8 @@ func (g *grpcServer) processRequest(ctx context.Context, stream grpc.ServerStrea
 			if err != nil {
 				return err
 			}
+		case (interface{ GRPCStatus() *status.Status }):
+			errStatus = verr.GRPCStatus()
 		default:
 			g.RLock()
 			config := g.opts
