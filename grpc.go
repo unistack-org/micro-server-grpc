@@ -255,7 +255,7 @@ func (g *grpcServer) handler(srv interface{}, stream grpc.ServerStream) (err err
 	if v, ok := md.Get("Grpc-Timeout"); ok {
 		md.Del("Grpc-Timeout")
 		td = v[:len(v)-1]
-		switch v[:] {
+		switch v[len(v)-1:] {
 		case "S":
 			td += "s"
 		case "M":
