@@ -368,8 +368,7 @@ func (g *grpcServer) processRequest(ctx context.Context, stream grpc.ServerStrea
 	}
 
 	// Unmarshal request
-	// TODO: avoid Marshal call later by recv to frame and reuse it data
-	if err := stream.RecvMsg(argv.Interface()); err != nil {
+	if err = stream.RecvMsg(argv.Interface()); err != nil {
 		return err
 	}
 
