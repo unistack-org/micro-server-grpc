@@ -255,7 +255,7 @@ func (g *grpcServer) handler(srv interface{}, stream grpc.ServerStream) (err err
 	if v, ok := md.Get("Grpc-Timeout"); ok {
 		md.Del("Grpc-Timeout")
 		td = v[:len(v)-1]
-		switch v[:] {
+		switch v[len(v)-1:] {
 		case "S":
 			td += "s"
 		case "M":
@@ -368,8 +368,7 @@ func (g *grpcServer) processRequest(ctx context.Context, stream grpc.ServerStrea
 	}
 
 	// Unmarshal request
-	// TODO: avoid Marshal call later by recv to frame and reuse it data
-	if err := stream.RecvMsg(argv.Interface()); err != nil {
+	if err = stream.RecvMsg(argv.Interface()); err != nil {
 		return err
 	}
 
@@ -425,6 +424,8 @@ func (g *grpcServer) processRequest(ctx context.Context, stream grpc.ServerStrea
 			if err != nil {
 				return err
 			}
+		case (interface{ GRPCStatus() *status.Status }):
+			errStatus = verr.GRPCStatus()
 		default:
 			g.RLock()
 			config := g.opts
