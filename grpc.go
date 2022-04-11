@@ -585,9 +585,6 @@ func (g *grpcServer) Options() server.Options {
 }
 
 func (g *grpcServer) Init(opts ...server.Option) error {
-	if len(opts) == 0 {
-		return nil
-	}
 	return g.configure(opts...)
 }
 
@@ -719,6 +716,7 @@ func (g *grpcServer) Register() error {
 		}
 		opts = append(opts, broker.SubscribeContext(subCtx))
 		opts = append(opts, broker.SubscribeAutoAck(sb.Options().AutoAck))
+		opts = append(opts, broker.SubscribeBodyOnly(sb.Options().BodyOnly))
 
 		if config.Logger.V(logger.InfoLevel) {
 			config.Logger.Infof(config.Context, "Subscribing to topic: %s", sb.Topic())
