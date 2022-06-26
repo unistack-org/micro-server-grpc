@@ -108,9 +108,6 @@ func (g *grpcServer) configure(opts ...server.Option) error {
 	if err := g.opts.Tracer.Init(); err != nil {
 		return err
 	}
-	if err := g.opts.Auth.Init(); err != nil {
-		return err
-	}
 	if err := g.opts.Logger.Init(); err != nil {
 		return err
 	}
