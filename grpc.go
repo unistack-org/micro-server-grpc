@@ -197,31 +197,6 @@ func (g *grpcServer) getGrpcOptions() []grpc.ServerOption {
 }
 
 func (g *grpcServer) handler(srv interface{}, stream grpc.ServerStream) (err error) {
-	defer func() {
-		if r := recover(); r != nil {
-			g.RLock()
-			config := g.opts
-			g.RUnlock()
-			if config.Logger.V(logger.ErrorLevel) {
-				config.Logger.Error(config.Context, "panic recovered: ", r)
-				config.Logger.Error(config.Context, string(debug.Stack()))
-			}
-			err = errors.InternalServerError(g.opts.Name, "panic recovered: %v", r)
-		} else if err != nil {
-			g.RLock()
-			config := g.opts
-			g.RUnlock()
-			if config.Logger.V(logger.ErrorLevel) {
-				config.Logger.Errorf(config.Context, "grpc handler got error: %s", err)
-			}
-		}
-	}()
-
-	if g.wg != nil {
-		g.wg.Add(1)
-		defer g.wg.Done()
-	}
-
 	fullMethod, ok := grpc.MethodFromServerStream(stream)
 	if !ok {
 		return status.Errorf(codes.Internal, "method does not exist in context")
@@ -230,6 +205,31 @@ func (g *grpcServer) handler(srv interface{}, stream grpc.ServerStream) (err err
 	serviceName, methodName, err := serviceMethod(fullMethod)
 	if err != nil {
 		return status.New(codes.InvalidArgument, err.Error()).Err()
+	}
+
+	defer func() {
+		if r := recover(); r != nil {
+			g.RLock()
+			config := g.opts
+			g.RUnlock()
+			if config.Logger.V(logger.ErrorLevel) {
+				config.Logger.Errorf(config.Context, "panic in %s.%s recovered: %v", serviceName, methodName, r)
+				config.Logger.Error(config.Context, string(debug.Stack()))
+			}
+			err = errors.InternalServerError(g.opts.Name, "panic in %s.%s recovered: %v", serviceName, methodName, r)
+		} else if err != nil {
+			g.RLock()
+			config := g.opts
+			g.RUnlock()
+			if config.Logger.V(logger.ErrorLevel) {
+				config.Logger.Errorf(config.Context, "grpc handler %s.%s got error: %s", serviceName, methodName, err)
+			}
+		}
+	}()
+
+	if g.wg != nil {
+		g.wg.Add(1)
+		defer g.wg.Done()
 	}
 
 	// get grpc metadata
