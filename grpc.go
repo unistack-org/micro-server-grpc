@@ -283,7 +283,7 @@ func (g *grpcServer) handler(srv interface{}, stream grpc.ServerStream) (err err
 
 	// get peer from context
 	if p, ok := peer.FromContext(stream.Context()); ok {
-		md["Remote"] = p.Addr.String()
+		md.Set("Remote", p.Addr.String())
 		ctx = peer.NewContext(ctx, p)
 	}
 
@@ -388,7 +388,7 @@ func (g *grpcServer) processRequest(ctx context.Context, stream grpc.ServerStrea
 	}
 	// define the handler func
 	fn := func(ctx context.Context, req server.Request, rsp interface{}) (err error) {
-		returnValues = function.Call([]reflect.Value{service.rcvr, mtype.prepareContext(ctx), reflect.ValueOf(argv.Interface()), reflect.ValueOf(rsp)})
+		returnValues = function.Call([]reflect.Value{service.rcvr, mtype.prepareContext(ctx), argv, reflect.ValueOf(rsp)})
 
 		// The return value for the method is an error.
 		if rerr := returnValues[0].Interface(); rerr != nil {
@@ -406,7 +406,13 @@ func (g *grpcServer) processRequest(ctx context.Context, stream grpc.ServerStrea
 	statusCode := codes.OK
 	statusDesc := ""
 	// execute the handler
-	if appErr := fn(ctx, r, replyv.Interface()); appErr != nil {
+	appErr := fn(ctx, r, replyv.Interface())
+	if outmd, ok := metadata.FromOutgoingContext(ctx); ok {
+		if err = stream.SendHeader(gmetadata.New(outmd)); err != nil {
+			return err
+		}
+	}
+	if appErr != nil {
 		var errStatus *status.Status
 		switch verr := appErr.(type) {
 		case *errors.Error:
@@ -526,7 +532,13 @@ func (g *grpcServer) processStream(ctx context.Context, stream grpc.ServerStream
 	statusCode := codes.OK
 	statusDesc := ""
 
-	if appErr := fn(ctx, r, ss); appErr != nil {
+	appErr := fn(ctx, r, ss)
+	if outmd, ok := metadata.FromOutgoingContext(ctx); ok {
+		if err := stream.SendHeader(gmetadata.New(outmd)); err != nil {
+			return err
+		}
+	}
+	if appErr != nil {
 		var err error
 		var errStatus *status.Status
 		switch verr := appErr.(type) {
