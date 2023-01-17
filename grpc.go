@@ -384,6 +384,7 @@ func (g *grpcServer) processRequest(ctx context.Context, stream grpc.ServerStrea
 		service:     g.opts.Name,
 		contentType: ct,
 		method:      fmt.Sprintf("%s.%s", service.name, mtype.method.Name),
+		endpoint:    fmt.Sprintf("%s.%s", service.name, mtype.method.Name),
 		payload:     argv.Interface(),
 	}
 	// define the handler func
@@ -504,6 +505,7 @@ func (g *grpcServer) processStream(ctx context.Context, stream grpc.ServerStream
 		service:     opts.Name,
 		contentType: ct,
 		method:      fmt.Sprintf("%s.%s", service.name, mtype.method.Name),
+		endpoint:    fmt.Sprintf("%s.%s", service.name, mtype.method.Name),
 		stream:      true,
 	}
 
