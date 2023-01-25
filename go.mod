@@ -6,6 +6,6 @@ require (
 	github.com/golang/protobuf v1.5.2
 	go.unistack.org/micro/v3 v3.10.4
 	golang.org/x/net v0.4.0
-	google.golang.org/grpc v1.52.0
+	google.golang.org/grpc v1.52.1
 	google.golang.org/protobuf v1.28.1
 )
