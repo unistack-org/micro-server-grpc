@@ -128,6 +128,10 @@ func (g *Server) configure(opts ...server.Option) error {
 		}
 	}
 
+	for _, k := range g.opts.Codecs {
+		encoding.RegisterCodec(&wrapMicroCodec{k})
+	}
+
 	maxMsgSize := g.getMaxMsgSize()
 
 	gopts := []grpc.ServerOption{
@@ -808,10 +812,6 @@ func (g *Server) Start() error {
 	g.RUnlock()
 
 	config := g.Options()
-
-	for _, k := range config.Codecs {
-		encoding.RegisterCodec(&wrapMicroCodec{k})
-	}
 
 	// micro: config.Transport.Listen(config.Address)
 	var ts net.Listener
