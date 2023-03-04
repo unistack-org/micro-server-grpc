@@ -102,7 +102,7 @@ func newSubscriber(topic string, sub interface{}, opts ...server.SubscriberOptio
 	}
 }
 
-func (g *grpcServer) createSubHandler(sb *subscriber, opts server.Options) broker.Handler {
+func (g *Server) createSubHandler(sb *subscriber, opts server.Options) broker.Handler {
 	return func(p broker.Event) (err error) {
 		defer func() {
 			if r := recover(); r != nil {
