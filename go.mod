@@ -1,10 +1,11 @@
 module go.unistack.org/micro-server-grpc/v3
 
-go 1.22.0
+go 1.22.2
 
+toolchain go1.24.2
 
 require (
-	go.unistack.org/micro/v3 v3.11.30
+	go.unistack.org/micro/v3 v3.11.41
 	golang.org/x/net v0.33.0
 	google.golang.org/grpc v1.69.2
 	google.golang.org/protobuf v1.36.1
