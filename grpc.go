@@ -230,11 +230,11 @@ func (g *Server) handler(srv interface{}, stream grpc.ServerStream) error {
 
 	var td string
 	// timeout for server deadline
-	if v, ok := md.Get("timeout"); ok && len(v) > 0 {
+	if v := md.Get("timeout"); v != nil {
 		md.Del("timeout")
 		td = v[0]
 	}
-	if v, ok := md.Get("grpc-timeout"); ok && len(v) > 0 {
+	if v := md.Get("grpc-timeout"); v != nil {
 		md.Del("grpc-timeout")
 		td = v[0][:len(v)-1]
 		switch v[0][len(v)-1:] {
@@ -256,7 +256,7 @@ func (g *Server) handler(srv interface{}, stream grpc.ServerStream) error {
 	// get content type
 	ct := DefaultContentType
 
-	if ctype, ok := md.Get("content-type"); ok && len(ctype) > 0 {
+	if ctype := md.Get("content-type"); ctype != nil {
 		ct = ctype[0]
 	}
 
