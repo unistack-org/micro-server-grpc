@@ -399,7 +399,7 @@ func (g *Server) processRequest(ctx context.Context, stream grpc.ServerStream, s
 	// execute the handler
 	appErr := fn(ctx, r, replyv.Interface())
 	if md := getResponseMetadata(ctx); len(md) > 0 {
-		if err = stream.SendHeader(gmetadata.MD(md)); err != nil {
+		if err = stream.SendHeader(md.AsHTTP2()); err != nil {
 			return err
 		}
 	}
@@ -483,7 +483,7 @@ func (g *Server) processStream(ctx context.Context, stream grpc.ServerStream, se
 
 	appErr := fn(ctx, r, ss)
 	if md := getResponseMetadata(ctx); len(md) > 0 {
-		if err := stream.SendHeader(gmetadata.MD(md)); err != nil {
+		if err := stream.SendHeader(md.AsHTTP2()); err != nil {
 			return err
 		}
 	}
