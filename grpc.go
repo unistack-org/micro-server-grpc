@@ -63,12 +63,12 @@ type Server struct {
 	rpc            *rServer
 	opts           server.Options
 	unknownHandler grpc.StreamHandler
-	sync.RWMutex
-	stateLive   *atomic.Uint32
-	stateReady  *atomic.Uint32
-	stateHealth *atomic.Uint32
-	started     bool
-	registered  bool
+	mu             sync.RWMutex
+	stateLive      *atomic.Uint32
+	stateReady     *atomic.Uint32
+	stateHealth    *atomic.Uint32
+	started        bool
+	registered     bool
 	// reflection  bool
 }
 
@@ -92,8 +92,8 @@ func newServer(opts ...server.Option) *Server {
 }
 
 func (g *Server) configure(opts ...server.Option) error {
-	g.Lock()
-	defer g.Unlock()
+	g.mu.Lock()
+	defer g.mu.Unlock()
 
 	for _, o := range opts {
 		o(&g.opts)
@@ -421,9 +421,9 @@ func (g *Server) processRequest(ctx context.Context, stream grpc.ServerStream, s
 		case (interface{ GRPCStatus() *status.Status }):
 			errStatus = verr.GRPCStatus()
 		default:
-			g.RLock()
+			g.mu.RLock()
 			config := g.opts
-			g.RUnlock()
+			g.mu.RUnlock()
 			if config.Logger.V(logger.ErrorLevel) {
 				config.Logger.Error(config.Context, "handler error will not be transferred properly, must return *errors.Error or proto.Message")
 			}
@@ -520,9 +520,9 @@ func (g *Server) processStream(ctx context.Context, stream grpc.ServerStream, se
 }
 
 func (g *Server) Options() server.Options {
-	g.RLock()
+	g.mu.RLock()
 	opts := g.opts
-	g.RUnlock()
+	g.mu.RUnlock()
 
 	return opts
 }
@@ -545,10 +545,10 @@ func (g *Server) Handle(h server.Handler) error {
 }
 
 func (g *Server) Register() error {
-	g.RLock()
+	g.mu.RLock()
 	rsvc := g.rsvc
 	config := g.opts
-	g.RUnlock()
+	g.mu.RUnlock()
 
 	// if service already filled, reuse it and return early
 	if rsvc != nil {
@@ -563,7 +563,7 @@ func (g *Server) Register() error {
 		return err
 	}
 
-	g.RLock()
+	g.mu.RLock()
 	// Maps are ordered randomly, sort the keys for consistency
 	handlerList := make([]string, 0, len(g.handlers))
 	for n := range g.handlers {
@@ -573,11 +573,11 @@ func (g *Server) Register() error {
 
 	sort.Strings(handlerList)
 
-	g.RUnlock()
+	g.mu.RUnlock()
 
-	g.RLock()
+	g.mu.RLock()
 	registered := g.registered
-	g.RUnlock()
+	g.mu.RUnlock()
 
 	if !registered {
 		if config.Logger.V(logger.InfoLevel) {
@@ -595,8 +595,8 @@ func (g *Server) Register() error {
 		return nil
 	}
 
-	g.Lock()
-	defer g.Unlock()
+	g.mu.Lock()
+	defer g.mu.Unlock()
 
 	g.registered = true
 	g.rsvc = service
@@ -607,9 +607,9 @@ func (g *Server) Register() error {
 func (g *Server) Deregister() error {
 	var err error
 
-	g.RLock()
+	g.mu.RLock()
 	config := g.opts
-	g.RUnlock()
+	g.mu.RUnlock()
 
 	service, err := server.NewRegisterService(g)
 	if err != nil {
@@ -624,27 +624,27 @@ func (g *Server) Deregister() error {
 		return err
 	}
 
-	g.Lock()
+	g.mu.Lock()
 	g.rsvc = nil
 
 	if !g.registered {
-		g.Unlock()
+		g.mu.Unlock()
 		return nil
 	}
 
 	g.registered = false
 
-	g.Unlock()
+	g.mu.Unlock()
 	return nil
 }
 
 func (g *Server) Start() error {
-	g.RLock()
+	g.mu.RLock()
 	if g.started {
-		g.RUnlock()
+		g.mu.RUnlock()
 		return nil
 	}
-	g.RUnlock()
+	g.mu.RUnlock()
 
 	config := g.Options()
 
@@ -674,12 +674,12 @@ func (g *Server) Start() error {
 	if config.Logger.V(logger.InfoLevel) {
 		config.Logger.Info(config.Context, "Server [grpc] Listening on "+ts.Addr().String())
 	}
-	g.Lock()
+	g.mu.Lock()
 	g.opts.Address = ts.Addr().String()
 	if len(g.opts.Advertise) == 0 {
 		g.opts.Advertise = ts.Addr().String()
 	}
-	g.Unlock()
+	g.mu.Unlock()
 
 	// use RegisterCheck func before register
 	// nolint: nestif
@@ -730,9 +730,9 @@ func (g *Server) Start() error {
 			select {
 			// register self on interval
 			case <-t.C:
-				g.RLock()
+				g.mu.RLock()
 				registered := g.registered
-				g.RUnlock()
+				g.mu.RUnlock()
 				rerr := g.opts.RegisterCheck(g.opts.Context)
 				// nolint: nestif
 				if rerr != nil && registered {
@@ -809,29 +809,29 @@ func (g *Server) Start() error {
 	}()
 
 	// mark the server as started
-	g.Lock()
+	g.mu.Lock()
 	g.started = true
-	g.Unlock()
+	g.mu.Unlock()
 
 	return nil
 }
 
 func (g *Server) Stop() error {
-	g.RLock()
+	g.mu.RLock()
 	if !g.started {
-		g.RUnlock()
+		g.mu.RUnlock()
 		return nil
 	}
-	g.RUnlock()
+	g.mu.RUnlock()
 
 	ch := make(chan error)
 	g.exit <- ch
 
 	err := <-ch
-	g.Lock()
+	g.mu.Lock()
 	g.rsvc = nil
 	g.started = false
-	g.Unlock()
+	g.mu.Unlock()
 
 	return err
 }
