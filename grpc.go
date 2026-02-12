@@ -48,27 +48,29 @@ type streamWrapper struct {
 	grpc.ServerStream
 }
 
-func (w *streamWrapper) Context() context.Context {
-	if w.ctx != nil {
-		return w.ctx
+func (sw *streamWrapper) Context() context.Context {
+	if sw.ctx != nil {
+		return sw.ctx
 	}
-	return w.ServerStream.Context()
+	return sw.ServerStream.Context()
 }
 
 type Server struct {
-	handlers       map[string]server.Handler
-	srv            *grpc.Server
-	exit           chan chan error
-	rsvc           *register.Service
-	rpc            *rServer
-	opts           server.Options
-	unknownHandler grpc.StreamHandler
-	mu             sync.RWMutex
-	stateLive      *atomic.Uint32
-	stateReady     *atomic.Uint32
-	stateHealth    *atomic.Uint32
-	started        bool
-	registered     bool
+	handlers         map[string]server.Handler
+	srv              *grpc.Server
+	listener         net.Listener
+	exit             chan struct{}
+	rsvc             *register.Service
+	rpc              *rServer
+	opts             server.Options
+	unknownHandler   grpc.StreamHandler
+	mu               sync.RWMutex
+	shutdownStopOnce sync.Once
+	stateLive        *atomic.Uint32
+	stateReady       *atomic.Uint32
+	stateHealth      *atomic.Uint32
+	started          atomic.Bool
+	registered       bool
 	// reflection  bool
 }
 
@@ -80,7 +82,7 @@ func newServer(opts ...server.Option) *Server {
 			serviceMap: make(map[string]*service),
 		},
 		handlers:    make(map[string]server.Handler),
-		exit:        make(chan chan error),
+		exit:        make(chan struct{}),
 		stateLive:   &atomic.Uint32{},
 		stateReady:  &atomic.Uint32{},
 		stateHealth: &atomic.Uint32{},
@@ -91,51 +93,51 @@ func newServer(opts ...server.Option) *Server {
 	return g
 }
 
-func (g *Server) configure(opts ...server.Option) error {
-	g.mu.Lock()
-	defer g.mu.Unlock()
+func (s *Server) configure(opts ...server.Option) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
 	for _, o := range opts {
-		o(&g.opts)
+		o(&s.opts)
 	}
 
-	if g.opts.Context != nil {
-		if codecs, ok := g.opts.Context.Value(codecsKey{}).(map[string]encoding.Codec); ok && codecs != nil {
+	if s.opts.Context != nil {
+		if codecs, ok := s.opts.Context.Value(codecsKey{}).(map[string]encoding.Codec); ok && codecs != nil {
 			for k, v := range codecs {
-				g.opts.Codecs[k] = &wrapGrpcCodec{v}
+				s.opts.Codecs[k] = &wrapGrpcCodec{v}
 			}
 		}
 	}
 
-	for _, k := range g.opts.Codecs {
+	for _, k := range s.opts.Codecs {
 		encoding.RegisterCodec(&wrapMicroCodec{k})
 	}
 
-	maxMsgSize := g.getMaxMsgSize()
+	maxMsgSize := s.getMaxMsgSize()
 
 	gopts := []grpc.ServerOption{
 		grpc.MaxRecvMsgSize(maxMsgSize),
 		grpc.MaxSendMsgSize(maxMsgSize),
-		grpc.UnknownServiceHandler(g.handler),
+		grpc.UnknownServiceHandler(s.handler),
 	}
 
-	if opts := g.getGrpcOptions(); opts != nil {
+	if opts := s.getGrpcOptions(); opts != nil {
 		gopts = append(opts, gopts...)
 	}
 
-	g.rsvc = nil
+	s.rsvc = nil
 	restart := false
-	if g.started {
+	if s.started.Load() {
 		restart = true
-		if err := g.Stop(); err != nil {
+		if err := s.Stop(); err != nil {
 			return err
 		}
 	}
-	g.srv = grpc.NewServer(gopts...)
+	s.srv = grpc.NewServer(gopts...)
 
-	if v, ok := g.opts.Context.Value(reflectionKey{}).(Reflector); ok {
+	if v, ok := s.opts.Context.Value(reflectionKey{}).(Reflector); ok {
 		reflectionv1pb.RegisterServerReflectionServer(
-			g.srv,
+			s.srv,
 			greflection.NewServerV1(greflection.ServerOptions{
 				Services:           v,
 				DescriptorResolver: v,
@@ -144,31 +146,31 @@ func (g *Server) configure(opts ...server.Option) error {
 		)
 	}
 
-	if h, ok := g.opts.Context.Value(unknownServiceHandlerKey{}).(grpc.StreamHandler); ok {
-		g.unknownHandler = h
+	if h, ok := s.opts.Context.Value(unknownServiceHandlerKey{}).(grpc.StreamHandler); ok {
+		s.unknownHandler = h
 	}
 
 	if restart {
-		return g.Start()
+		return s.Start()
 	}
 
 	return nil
 }
 
-func (g *Server) getMaxMsgSize() int {
-	s, ok := g.opts.Context.Value(maxMsgSizeKey{}).(int)
+func (s *Server) getMaxMsgSize() int {
+	size, ok := s.opts.Context.Value(maxMsgSizeKey{}).(int)
 	if !ok {
 		return 4 * 1024 * 1024
 	}
-	return s
+	return size
 }
 
-func (g *Server) getGrpcOptions() []grpc.ServerOption {
-	if g.opts.Context == nil {
+func (s *Server) getGrpcOptions() []grpc.ServerOption {
+	if s.opts.Context == nil {
 		return nil
 	}
 
-	opts, ok := g.opts.Context.Value(grpcOptions{}).([]grpc.ServerOption)
+	opts, ok := s.opts.Context.Value(grpcOptions{}).([]grpc.ServerOption)
 	if !ok || opts == nil {
 		return nil
 	}
@@ -176,7 +178,7 @@ func (g *Server) getGrpcOptions() []grpc.ServerOption {
 	return opts
 }
 
-func (g *Server) handler(srv interface{}, stream grpc.ServerStream) error {
+func (s *Server) handler(srv interface{}, stream grpc.ServerStream) error {
 	var err error
 
 	ctx := stream.Context()
@@ -205,7 +207,7 @@ func (g *Server) handler(srv interface{}, stream grpc.ServerStream) error {
 	ts := time.Now()
 	var sp tracer.Span
 	if !slices.Contains(tracer.DefaultSkipEndpoints, endpointName) {
-		ctx, sp = g.opts.Tracer.Start(ctx, "rpc-server",
+		ctx, sp = s.opts.Tracer.Start(ctx, "rpc-server",
 			tracer.WithSpanKind(tracer.SpanKindServer),
 			tracer.WithSpanLabels(
 				"endpoint", endpointName,
@@ -268,25 +270,25 @@ func (g *Server) handler(srv interface{}, stream grpc.ServerStream) error {
 	stream = &streamWrapper{ctx, stream}
 
 	if !slices.Contains(meter.DefaultSkipEndpoints, endpointName) {
-		g.opts.Meter.Counter(semconv.ServerRequestInflight, "endpoint", endpointName, "server", "grpc").Inc()
+		s.opts.Meter.Counter(semconv.ServerRequestInflight, "endpoint", endpointName, "server", "grpc").Inc()
 		defer func() {
 			te := time.Since(ts)
-			g.opts.Meter.Summary(semconv.ServerRequestLatencyMicroseconds, "endpoint", endpointName, "server", "grpc").Update(te.Seconds())
-			g.opts.Meter.Histogram(semconv.ServerRequestDurationSeconds, "endpoint", endpointName, "server", "grpc").Update(te.Seconds())
-			g.opts.Meter.Counter(semconv.ServerRequestInflight, "endpoint", endpointName, "server", "grpc").Dec()
+			s.opts.Meter.Summary(semconv.ServerRequestLatencyMicroseconds, "endpoint", endpointName, "server", "grpc").Update(te.Seconds())
+			s.opts.Meter.Histogram(semconv.ServerRequestDurationSeconds, "endpoint", endpointName, "server", "grpc").Update(te.Seconds())
+			s.opts.Meter.Counter(semconv.ServerRequestInflight, "endpoint", endpointName, "server", "grpc").Dec()
 
 			st := status.Convert(err)
 			if st == nil || st.Code() == codes.OK {
-				g.opts.Meter.Counter(semconv.ServerRequestTotal, "endpoint", endpointName, "server", "grpc", "status", "success", "code", strconv.Itoa(int(codes.OK))).Inc()
+				s.opts.Meter.Counter(semconv.ServerRequestTotal, "endpoint", endpointName, "server", "grpc", "status", "success", "code", strconv.Itoa(int(codes.OK))).Inc()
 			} else {
-				g.opts.Meter.Counter(semconv.ServerRequestTotal, "endpoint", endpointName, "server", "grpc", "status", "failure", "code", strconv.Itoa(int(st.Code()))).Inc()
+				s.opts.Meter.Counter(semconv.ServerRequestTotal, "endpoint", endpointName, "server", "grpc", "status", "failure", "code", strconv.Itoa(int(st.Code()))).Inc()
 			}
 		}()
 	}
 
-	if g.opts.Wait != nil {
-		g.opts.Wait.Add(1)
-		defer g.opts.Wait.Done()
+	if s.opts.Wait != nil {
+		s.opts.Wait.Add(1)
+		defer s.opts.Wait.Done()
 	}
 
 	// get peer from context
@@ -305,13 +307,13 @@ func (g *Server) handler(srv interface{}, stream grpc.ServerStream) error {
 		}
 	}
 
-	g.rpc.mu.RLock()
-	svc := g.rpc.serviceMap[serviceName]
-	g.rpc.mu.RUnlock()
+	s.rpc.mu.RLock()
+	svc := s.rpc.serviceMap[serviceName]
+	s.rpc.mu.RUnlock()
 
 	if svc == nil {
-		if g.unknownHandler != nil {
-			err = g.unknownHandler(srv, stream)
+		if s.unknownHandler != nil {
+			err = s.unknownHandler(srv, stream)
 			return err
 		}
 		err = status.New(codes.Unimplemented, fmt.Sprintf("unknown service %s", serviceName)).Err()
@@ -320,8 +322,8 @@ func (g *Server) handler(srv interface{}, stream grpc.ServerStream) error {
 
 	mtype := svc.method[methodName]
 	if mtype == nil {
-		if g.unknownHandler != nil {
-			err = g.unknownHandler(srv, stream)
+		if s.unknownHandler != nil {
+			err = s.unknownHandler(srv, stream)
 			return err
 		}
 		err = status.New(codes.Unimplemented, fmt.Sprintf("unknown service method %s.%s", serviceName, methodName)).Err()
@@ -330,16 +332,16 @@ func (g *Server) handler(srv interface{}, stream grpc.ServerStream) error {
 
 	// process unary
 	if !mtype.stream {
-		err = g.processRequest(ctx, stream, svc, mtype, ct)
+		err = s.processRequest(ctx, stream, svc, mtype, ct)
 	} else {
 		// process stream
-		err = g.processStream(ctx, stream, svc, mtype, ct)
+		err = s.processStream(ctx, stream, svc, mtype, ct)
 	}
 
 	return err
 }
 
-func (g *Server) processRequest(ctx context.Context, stream grpc.ServerStream, service *service, mtype *methodType, ct string) error {
+func (s *Server) processRequest(ctx context.Context, stream grpc.ServerStream, service *service, mtype *methodType, ct string) error {
 	// for {
 	var err error
 	var argv, replyv reflect.Value
@@ -370,7 +372,7 @@ func (g *Server) processRequest(ctx context.Context, stream grpc.ServerStream, s
 
 	// create a client.Request
 	r := &rpcRequest{
-		service:     g.opts.Name,
+		service:     s.opts.Name,
 		contentType: ct,
 		method:      fmt.Sprintf("%s.%s", service.name, mtype.method.Name),
 		endpoint:    fmt.Sprintf("%s.%s", service.name, mtype.method.Name),
@@ -388,7 +390,7 @@ func (g *Server) processRequest(ctx context.Context, stream grpc.ServerStream, s
 		return err
 	}
 
-	g.opts.Hooks.EachPrev(func(hook options.Hook) {
+	s.opts.Hooks.EachPrev(func(hook options.Hook) {
 		if h, ok := hook.(server.HookHandler); ok {
 			fn = h(fn)
 		}
@@ -428,9 +430,9 @@ func (g *Server) processRequest(ctx context.Context, stream grpc.ServerStream, s
 				return err
 			}
 		default:
-			g.mu.RLock()
-			config := g.opts
-			g.mu.RUnlock()
+			s.mu.RLock()
+			config := s.opts
+			s.mu.RUnlock()
 			if config.Logger.V(logger.ErrorLevel) {
 				config.Logger.Error(config.Context, "handler error will not be transferred properly, must return *errors.Error or proto.Message")
 			}
@@ -450,8 +452,8 @@ func (g *Server) processRequest(ctx context.Context, stream grpc.ServerStream, s
 	return status.New(statusCode, statusDesc).Err()
 }
 
-func (g *Server) processStream(ctx context.Context, stream grpc.ServerStream, service *service, mtype *methodType, ct string) error {
-	opts := g.opts
+func (s *Server) processStream(ctx context.Context, stream grpc.ServerStream, service *service, mtype *methodType, ct string) error {
+	opts := s.opts
 
 	r := &rpcRequest{
 		service:     opts.Name,
@@ -519,8 +521,8 @@ func (g *Server) processStream(ctx context.Context, stream grpc.ServerStream, se
 				return err
 			}
 		default:
-			if g.opts.Logger.V(logger.ErrorLevel) {
-				g.opts.Logger.Error(g.opts.Context, "handler error will not be transferred properly, must return *errors.Error or proto.Message")
+			if s.opts.Logger.V(logger.ErrorLevel) {
+				s.opts.Logger.Error(s.opts.Context, "handler error will not be transferred properly, must return *errors.Error or proto.Message")
 			}
 			// default case user pass own error type that not proto based
 			statusCode = convertCode(verr)
@@ -534,36 +536,36 @@ func (g *Server) processStream(ctx context.Context, stream grpc.ServerStream, se
 	return status.New(statusCode, statusDesc).Err()
 }
 
-func (g *Server) Options() server.Options {
-	g.mu.RLock()
-	opts := g.opts
-	g.mu.RUnlock()
+func (s *Server) Options() server.Options {
+	s.mu.RLock()
+	opts := s.opts
+	s.mu.RUnlock()
 
 	return opts
 }
 
-func (g *Server) Init(opts ...server.Option) error {
-	return g.configure(opts...)
+func (s *Server) Init(opts ...server.Option) error {
+	return s.configure(opts...)
 }
 
-func (g *Server) NewHandler(h interface{}, opts ...server.HandlerOption) server.Handler {
+func (s *Server) NewHandler(h interface{}, opts ...server.HandlerOption) server.Handler {
 	return newRPCHandler(h, opts...)
 }
 
-func (g *Server) Handle(h server.Handler) error {
-	if err := g.rpc.register(h.Handler()); err != nil {
+func (s *Server) Handle(h server.Handler) error {
+	if err := s.rpc.register(h.Handler()); err != nil {
 		return err
 	}
 
-	g.handlers[h.Name()] = h
+	s.handlers[h.Name()] = h
 	return nil
 }
 
-func (g *Server) Register() error {
-	g.mu.RLock()
-	rsvc := g.rsvc
-	config := g.opts
-	g.mu.RUnlock()
+func (s *Server) Register() error {
+	s.mu.RLock()
+	rsvc := s.rsvc
+	config := s.opts
+	s.mu.RUnlock()
 
 	// if service already filled, reuse it and return early
 	if rsvc != nil {
@@ -573,26 +575,26 @@ func (g *Server) Register() error {
 		return nil
 	}
 
-	service, err := server.NewRegisterService(g)
+	service, err := server.NewRegisterService(s)
 	if err != nil {
 		return err
 	}
 
-	g.mu.RLock()
+	s.mu.RLock()
 	// Maps are ordered randomly, sort the keys for consistency
-	handlerList := make([]string, 0, len(g.handlers))
-	for n := range g.handlers {
+	handlerList := make([]string, 0, len(s.handlers))
+	for n := range s.handlers {
 		// Only advertise non internal handlers
 		handlerList = append(handlerList, n)
 	}
 
 	sort.Strings(handlerList)
 
-	g.mu.RUnlock()
+	s.mu.RUnlock()
 
-	g.mu.RLock()
-	registered := g.registered
-	g.mu.RUnlock()
+	s.mu.RLock()
+	registered := s.registered
+	s.mu.RUnlock()
 
 	if !registered {
 		if config.Logger.V(logger.InfoLevel) {
@@ -610,23 +612,23 @@ func (g *Server) Register() error {
 		return nil
 	}
 
-	g.mu.Lock()
-	defer g.mu.Unlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
-	g.registered = true
-	g.rsvc = service
+	s.registered = true
+	s.rsvc = service
 
 	return nil
 }
 
-func (g *Server) Deregister() error {
+func (s *Server) Deregister() error {
 	var err error
 
-	g.mu.RLock()
-	config := g.opts
-	g.mu.RUnlock()
+	s.mu.RLock()
+	config := s.opts
+	s.mu.RUnlock()
 
-	service, err := server.NewRegisterService(g)
+	service, err := server.NewRegisterService(s)
 	if err != nil {
 		return err
 	}
@@ -639,240 +641,264 @@ func (g *Server) Deregister() error {
 		return err
 	}
 
-	g.mu.Lock()
-	g.rsvc = nil
+	s.mu.Lock()
+	s.rsvc = nil
 
-	if !g.registered {
-		g.mu.Unlock()
+	if !s.registered {
+		s.mu.Unlock()
 		return nil
 	}
 
-	g.registered = false
+	s.registered = false
 
-	g.mu.Unlock()
+	s.mu.Unlock()
 	return nil
 }
 
-func (g *Server) Start() error {
-	g.mu.RLock()
-	if g.started {
-		g.mu.RUnlock()
+func (s *Server) Start() (err error) {
+	if !s.started.CompareAndSwap(false, true) {
 		return nil
 	}
-	g.mu.RUnlock()
 
-	config := g.Options()
+	defer func() {
+		if err != nil {
+			s.started.Store(false)
+		}
+	}()
+
+	cfg := s.Options()
 
 	// micro: config.Transport.Listen(config.Address)
 	var ts net.Listener
-	var err error
 
-	if l := config.Listener; l != nil {
+	if l := cfg.Listener; l != nil {
 		ts = l
 	} else {
 		// check the tls config for secure connect
-		if tc := config.TLSConfig; tc != nil {
-			ts, err = tls.Listen("tcp", config.Address, tc)
+		if tc := cfg.TLSConfig; tc != nil {
+			ts, err = tls.Listen("tcp", cfg.Address, tc)
 			// otherwise just plain tcp listener
 		} else {
-			ts, err = net.Listen("tcp", config.Address)
+			ts, err = net.Listen("tcp", cfg.Address)
 		}
 		if err != nil {
 			return err
 		}
 	}
 
-	if config.MaxConn > 0 {
-		ts = netutil.LimitListener(ts, config.MaxConn)
+	if cfg.MaxConn > 0 {
+		ts = netutil.LimitListener(ts, cfg.MaxConn)
 	}
 
-	if config.Logger.V(logger.InfoLevel) {
-		config.Logger.Info(config.Context, "Server [grpc] Listening on "+ts.Addr().String())
+	if cfg.Logger.V(logger.InfoLevel) {
+		cfg.Logger.Info(cfg.Context, "Server [grpc] Listening on "+ts.Addr().String())
 	}
-	g.mu.Lock()
-	g.opts.Address = ts.Addr().String()
-	if len(g.opts.Advertise) == 0 {
-		g.opts.Advertise = ts.Addr().String()
+	s.mu.Lock()
+	s.listener = ts
+	s.opts.Address = ts.Addr().String()
+	if len(s.opts.Advertise) == 0 {
+		s.opts.Advertise = ts.Addr().String()
 	}
-	g.mu.Unlock()
+	s.mu.Unlock()
 
 	// use RegisterCheck func before register
 	// nolint: nestif
-	if err = g.opts.RegisterCheck(config.Context); err != nil {
-		if config.Logger.V(logger.ErrorLevel) {
-			config.Logger.Error(config.Context, fmt.Sprintf("Server %s-%s register check error", config.Name, config.ID), err)
+	if err = s.opts.RegisterCheck(cfg.Context); err != nil {
+		if cfg.Logger.V(logger.ErrorLevel) {
+			cfg.Logger.Error(cfg.Context, fmt.Sprintf("Server %s-%s register check error", cfg.Name, cfg.ID), err)
 		}
 	} else {
 		// announce self to the world
-		if err = g.Register(); err != nil {
-			if config.Logger.V(logger.ErrorLevel) {
-				config.Logger.Error(config.Context, "Server register error", err)
+		if err = s.Register(); err != nil {
+			if cfg.Logger.V(logger.ErrorLevel) {
+				cfg.Logger.Error(cfg.Context, "Server register error", err)
 			}
 		}
 	}
 
 	// micro: go ts.Accept(s.accept)
 	go func() {
-		if err = g.srv.Serve(ts); err != nil {
-			if config.Logger.V(logger.ErrorLevel) {
-				config.Logger.Error(config.Context, "gRPC Server start error", err)
+		if err = s.srv.Serve(ts); err != nil {
+			if cfg.Logger.V(logger.ErrorLevel) {
+				cfg.Logger.Error(cfg.Context, "gRPC Server start error", err)
 			}
-			if err = g.Stop(); err != nil {
-				if config.Logger.V(logger.ErrorLevel) {
-					config.Logger.Error(config.Context, "gRPC Server stop error", err)
+			if err = s.Stop(); err != nil {
+				if cfg.Logger.V(logger.ErrorLevel) {
+					cfg.Logger.Error(cfg.Context, "gRPC Server stop error", err)
 				}
 			}
 		}
-		g.stateLive.Store(1)
-		g.stateReady.Store(1)
-		g.stateHealth.Store(1)
+		s.stateLive.Store(1)
+		s.stateReady.Store(1)
+		s.stateHealth.Store(1)
 	}()
 
 	go func() {
 		t := new(time.Ticker)
 
 		// only process if it exists
-		if g.opts.RegisterInterval > time.Duration(0) {
+		if s.opts.RegisterInterval > time.Duration(0) {
 			// new ticker
-			t = time.NewTicker(g.opts.RegisterInterval)
+			t = time.NewTicker(s.opts.RegisterInterval)
 		}
 
-		// return error chan
-		var ch chan error
-
-	Loop:
 		for {
 			select {
 			// register self on interval
 			case <-t.C:
-				g.mu.RLock()
-				registered := g.registered
-				g.mu.RUnlock()
-				rerr := g.opts.RegisterCheck(g.opts.Context)
+				s.mu.RLock()
+				registered := s.registered
+				s.mu.RUnlock()
+				rerr := s.opts.RegisterCheck(s.opts.Context)
 				// nolint: nestif
 				if rerr != nil && registered {
-					if config.Logger.V(logger.ErrorLevel) {
-						config.Logger.Error(config.Context, fmt.Sprintf("Server %s-%s register check error, deregister it", config.Name, config.ID), rerr)
+					if cfg.Logger.V(logger.ErrorLevel) {
+						cfg.Logger.Error(cfg.Context, fmt.Sprintf("Server %s-%s register check error, deregister it", cfg.Name, cfg.ID), rerr)
 					}
 					// deregister self in case of error
-					if err = g.Deregister(); err != nil {
-						if config.Logger.V(logger.ErrorLevel) {
-							config.Logger.Error(config.Context, fmt.Sprintf("Server %s-%s deregister error", config.Name, config.ID), err)
+					if err = s.Deregister(); err != nil {
+						if cfg.Logger.V(logger.ErrorLevel) {
+							cfg.Logger.Error(cfg.Context, fmt.Sprintf("Server %s-%s deregister error", cfg.Name, cfg.ID), err)
 						}
 					}
 				} else if rerr != nil && !registered {
-					if config.Logger.V(logger.ErrorLevel) {
-						config.Logger.Error(config.Context, fmt.Sprintf("Server %s-%s register check error", config.Name, config.ID), rerr)
+					if cfg.Logger.V(logger.ErrorLevel) {
+						cfg.Logger.Error(cfg.Context, fmt.Sprintf("Server %s-%s register check error", cfg.Name, cfg.ID), rerr)
 					}
 					continue
 				}
-				if err = g.Register(); err != nil {
-					if config.Logger.V(logger.ErrorLevel) {
-						config.Logger.Error(config.Context, fmt.Sprintf("Server %s-%s register error", config.Name, config.ID), err)
+				if err = s.Register(); err != nil {
+					if cfg.Logger.V(logger.ErrorLevel) {
+						cfg.Logger.Error(cfg.Context, fmt.Sprintf("Server %s-%s register error", cfg.Name, cfg.ID), err)
 					}
 				}
 			// wait for exit
-			case ch = <-g.exit:
-				break Loop
-			}
-		}
-
-		// deregister self
-		if err = g.Deregister(); err != nil {
-			if config.Logger.V(logger.ErrorLevel) {
-				config.Logger.Error(config.Context, "Server deregister error", err)
-			}
-		}
-
-		// wait for waitgroup
-		if g.opts.Wait != nil {
-			g.opts.Wait.Wait()
-		}
-
-		// stop the grpc server
-		exit := make(chan bool)
-
-		go func() {
-			g.srv.GracefulStop()
-			close(exit)
-			g.stateLive.Store(0)
-			g.stateReady.Store(0)
-			g.stateHealth.Store(0)
-		}()
-
-		select {
-		case <-exit:
-		case <-time.After(g.opts.GracefulTimeout):
-			g.srv.Stop()
-			g.stateLive.Store(0)
-			g.stateReady.Store(0)
-			g.stateHealth.Store(0)
-		}
-
-		// close transport
-		ch <- nil
-
-		if config.Logger.V(logger.InfoLevel) {
-			config.Logger.Info(config.Context, fmt.Sprintf("broker [%s] Disconnected from %s", config.Broker.String(), config.Broker.Address()))
-		}
-		// disconnect broker
-		if err = config.Broker.Disconnect(config.Context); err != nil {
-			if config.Logger.V(logger.ErrorLevel) {
-				config.Logger.Error(config.Context, fmt.Sprintf("broker [%s] disconnect error", config.Broker.String()), err)
+			case <-s.exit:
+				t.Stop()
+				return
 			}
 		}
 	}()
 
-	// mark the server as started
-	g.mu.Lock()
-	g.started = true
-	g.mu.Unlock()
-
 	return nil
 }
 
-func (g *Server) Stop() error {
-	g.mu.RLock()
-	if !g.started {
-		g.mu.RUnlock()
+func (s *Server) Stop() error {
+	if !s.started.CompareAndSwap(true, false) {
 		return nil
 	}
-	g.mu.RUnlock()
 
-	ch := make(chan error)
-	g.exit <- ch
-
-	err := <-ch
-	g.mu.Lock()
-	g.rsvc = nil
-	g.started = false
-	g.mu.Unlock()
-
-	return err
+	return s.stop()
 }
 
-func (g *Server) String() string {
+func (s *Server) stop() error {
+	cfg := s.Options()
+	if cfg.Logger.V(logger.InfoLevel) {
+		cfg.Logger.Info(cfg.Context, "Graceful shutdown initiated")
+	}
+	ctx, cancel := context.WithTimeout(cfg.Context, cfg.GracefulTimeout)
+	defer cancel()
+
+	if s.listener != nil {
+		if err := s.listener.Close(); err != nil {
+			if cfg.Logger.V(logger.InfoLevel) {
+				cfg.Logger.Info(ctx, "Listener close error", err)
+			}
+		}
+	}
+
+	close(s.exit)
+
+	// deregister self
+	if err := s.Deregister(); err != nil {
+		if cfg.Logger.V(logger.ErrorLevel) {
+			cfg.Logger.Error(cfg.Context, "Server deregister error", err)
+		}
+	}
+
+	// wait for waitgroup
+	if s.opts.Wait != nil {
+		waitDone := make(chan struct{})
+		go func() {
+			s.opts.Wait.Wait()
+			close(waitDone)
+		}()
+
+		select {
+		case <-waitDone:
+			if cfg.Logger.V(logger.InfoLevel) {
+				cfg.Logger.Info(ctx, "All active goroutines(requests) completed")
+			}
+		case <-ctx.Done():
+			if cfg.Logger.V(logger.WarnLevel) {
+				cfg.Logger.Warn(ctx, "Graceful timeout exceeded")
+			}
+		}
+	}
+
+	grpcErr := error(nil)
+	grpcStop := make(chan struct{})
+
+	go func() {
+		s.srv.GracefulStop()
+		close(grpcStop)
+	}()
+
+	select {
+	case <-grpcStop:
+		if cfg.Logger.V(logger.InfoLevel) {
+			cfg.Logger.Info(ctx, "gRPC server stopped graceful")
+		}
+	case <-ctx.Done():
+		if cfg.Logger.V(logger.WarnLevel) {
+			cfg.Logger.Warn(ctx, "gRPC server graceful timeout exceeded, forcing stop")
+		}
+		grpcErr = fmt.Errorf("gRPC shutdown timeout")
+		s.srv.Stop()
+	}
+
+	// disconnect broker
+	if cfg.Logger.V(logger.InfoLevel) {
+		cfg.Logger.Info(cfg.Context, fmt.Sprintf("broker [%s] Disconnected from %s", cfg.Broker.String(), cfg.Broker.Address()))
+	}
+	if err := cfg.Broker.Disconnect(cfg.Context); err != nil {
+		if cfg.Logger.V(logger.ErrorLevel) {
+			cfg.Logger.Error(cfg.Context, fmt.Sprintf("broker [%s] disconnect error", cfg.Broker.String()), err)
+		}
+	}
+
+	s.stateLive.Store(0)
+	s.stateReady.Store(0)
+	s.stateHealth.Store(0)
+	s.mu.Lock()
+	s.rsvc = nil
+	s.mu.Unlock()
+
+	return grpcErr
+}
+
+func (s *Server) String() string {
 	return "grpc"
 }
 
-func (g *Server) Name() string {
-	return g.opts.Name
+func (s *Server) Name() string {
+	return s.opts.Name
 }
 
-func (g *Server) GRPCServer() *grpc.Server {
-	return g.srv
+func (s *Server) GRPCServer() *grpc.Server {
+	return s.srv
 }
 
-func (g *Server) Live() bool {
-	return g.stateLive.Load() == 1
+func (s *Server) Live() bool {
+	return s.stateLive.Load() == 1
 }
 
-func (g *Server) Ready() bool {
-	return g.stateReady.Load() == 1
+func (s *Server) Ready() bool {
+	return s.stateReady.Load() == 1
 }
 
-func (g *Server) Health() bool {
-	return g.stateHealth.Load() == 1
+func (s *Server) Health() bool {
+	return s.stateHealth.Load() == 1
 }
 
 func NewServer(opts ...server.Option) *Server {
