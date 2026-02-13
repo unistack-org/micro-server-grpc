@@ -6,6 +6,8 @@ toolchain go1.24.2
 
 require (
 	github.com/stretchr/testify v1.10.0
+	go.unistack.org/micro-client-grpc/v4 v4.1.2
+	go.unistack.org/micro-codec-proto/v4 v4.1.0
 	go.unistack.org/micro/v4 v4.1.8
 	golang.org/x/net v0.39.0
 	google.golang.org/grpc v1.72.0
