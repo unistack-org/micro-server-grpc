@@ -796,7 +796,8 @@ func (s *Server) stop() error {
 	if cfg.Logger.V(logger.InfoLevel) {
 		cfg.Logger.Info(cfg.Context, "Graceful shutdown initiated")
 	}
-	ctx, cancel := context.WithTimeout(cfg.Context, cfg.GracefulTimeout)
+
+	ctx, cancel := context.WithTimeout(context.Background(), cfg.GracefulTimeout)
 	defer cancel()
 
 	if s.listener != nil {
@@ -859,11 +860,11 @@ func (s *Server) stop() error {
 
 	// disconnect broker
 	if cfg.Logger.V(logger.InfoLevel) {
-		cfg.Logger.Info(cfg.Context, fmt.Sprintf("broker [%s] Disconnected from %s", cfg.Broker.String(), cfg.Broker.Address()))
+		cfg.Logger.Info(ctx, fmt.Sprintf("broker [%s] Disconnected from %s", cfg.Broker.String(), cfg.Broker.Address()))
 	}
-	if err := cfg.Broker.Disconnect(cfg.Context); err != nil {
+	if err := cfg.Broker.Disconnect(ctx); err != nil {
 		if cfg.Logger.V(logger.ErrorLevel) {
-			cfg.Logger.Error(cfg.Context, fmt.Sprintf("broker [%s] disconnect error", cfg.Broker.String()), err)
+			cfg.Logger.Error(ctx, fmt.Sprintf("broker [%s] disconnect error", cfg.Broker.String()), err)
 		}
 	}
 
