@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"testing"
 	
-	"go.unistack.org/micro/v4/server"
+	"go.unistack.org/micro/v5/server"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/reflect/protoregistry"

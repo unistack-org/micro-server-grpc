@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"os"
 
-	"go.unistack.org/micro/v4/errors"
+	"go.unistack.org/micro/v5/errors"
 	"google.golang.org/grpc/codes"
 )
 

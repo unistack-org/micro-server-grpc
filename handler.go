@@ -3,7 +3,7 @@ package grpc
 import (
 	"reflect"
 
-	"go.unistack.org/micro/v4/server"
+	"go.unistack.org/micro/v5/server"
 )
 
 type rpcHandler struct {

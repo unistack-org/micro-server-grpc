@@ -1,4 +1,4 @@
-module go.unistack.org/micro-server-grpc/v4
+module go.unistack.org/micro-server-grpc/v5
 
 go 1.24.0
 
@@ -6,9 +6,9 @@ toolchain go1.24.2
 
 require (
 	github.com/stretchr/testify v1.10.0
-	go.unistack.org/micro-client-grpc/v4 v4.1.2
-	go.unistack.org/micro-codec-proto/v4 v4.1.0
-	go.unistack.org/micro/v4 v4.1.8
+	go.unistack.org/micro-client-grpc/v5 v4.1.2
+	go.unistack.org/micro-codec-proto/v5 v4.1.0
+	go.unistack.org/micro/v5 v4.1.8
 	golang.org/x/net v0.48.0
 	google.golang.org/grpc v1.79.3
 	google.golang.org/protobuf v1.36.10
@@ -21,7 +21,7 @@ require (
 	github.com/matoous/go-nanoid v1.5.1 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/spf13/cast v1.7.1 // indirect
-	go.unistack.org/micro-proto/v4 v4.1.0 // indirect
+	go.unistack.org/micro-proto/v5 v4.1.0 // indirect
 	golang.org/x/sys v0.39.0 // indirect
 	golang.org/x/text v0.32.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20251202230838-ff82c1b0f217 // indirect

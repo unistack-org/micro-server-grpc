@@ -14,7 +14,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"go.unistack.org/micro/v4/server"
+	"go.unistack.org/micro/v5/server"
 )
 
 // Precompute the reflect type for error. Can't use error directly
